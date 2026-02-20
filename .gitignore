@@ -1,0 +1,24 @@
+# Build outputs
+libfprint-fork/build/
+nbis-test/nbis-bozorth3-test
+nbis-test/nbis-minutiae-test
+
+# Loose scratch files at repo root (canonical copies live in test-data/)
+/enrolled.pgm
+/test-storage.variant
+/clear.png
+/fingerprint.png
+
+# AUR makepkg clone directory (created by makepkg -s)
+packaging/aur/libfprint-goodixtls511-git/
+
+# AUR makepkg build artifacts
+packaging/aur/src/
+packaging/aur/pkg/
+packaging/aur/*.pkg.tar.*
+
+# Editor / OS
+.vscode/settings.json
+*.swp
+*~
+.DS_Store

@@ -1,0 +1,55 @@
+{
+    "name": "Goodix 5110 Fingerprint Dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+
+    // Mount the USB bus so the sensor (27c6:5110) is accessible inside the container.
+    // --privileged is required for USB device claiming and usbip.
+    // --net=host is needed so fprintd can reach D-Bus on the host session bus.
+    "runArgs": [
+        "--privileged",
+        "--userns=host",
+        "--net=host",
+        "--device=/dev/bus/usb",
+        "-v", "/dev/bus/usb:/dev/bus/usb",
+        "-v", "/run/dbus:/run/dbus",
+        "-v", "/tmp:/tmp"
+    ],
+
+    // Mount the repo as the workspace
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "workspaceFolder": "/workspace",
+
+    // Useful VS Code extensions for C/libfprint development
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "mesonbuild.mesonbuild",
+                "ms-python.python",
+                "vadimcn.vscode-lldb"
+            ],
+            "settings": {
+                "C_Cpp.default.compilerPath": "/usr/bin/gcc-11",
+                "C_Cpp.default.includePath": [
+                    "/usr/include/glib-2.0",
+                    "/usr/lib/x86_64-linux-gnu/glib-2.0/include",
+                    "/usr/include/libusb-1.0",
+                    "/usr/local/include/libfprint-2",
+                    "${workspaceFolder}/**"
+                ]
+            }
+        }
+    },
+
+    // First-time setup: build libfprint from the workspace source
+    "postCreateCommand": "/opt/build-libfprint.sh",
+
+    // After container starts, remind the user of the key paths
+    "postStartCommand": "echo '--- Key paths ---' && echo 'libfprint source:         /workspace/libfprint-fork (git, persists rebuilds)' && echo 'libfprint build:          /opt/build-libfprint.sh (rebuild after changes)' && echo 'goodix-fp-linux-dev fork: /opt/libfprint-goodix-fp-linux-dev' && echo 'goodix-fp-dump:           /opt/goodix-fp-dump' && echo 'Sensor check:             lsusb | grep 27c6'",
+
+    "remoteUser": "root"
+}

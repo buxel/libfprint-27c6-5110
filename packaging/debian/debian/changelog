@@ -1,0 +1,10 @@
+libfprint-goodixtls511 (1.94.9-1) unstable; urgency=medium
+
+  * Initial packaging based on libfprint 1.94.9.
+  * Add Goodix GF511 (27c6:5110) TLS fingerprint sensor driver.
+  * TLS implementation uses GnuTLS (no OpenSSL, no pthreads).
+  * Fingerprint matching uses pure-C FAST-9 + BRIEF-256 (no OpenCV).
+  * meson.build: accept 'libudev' as fallback pkg-config name for Debian
+    (upstream-worthy one-liner; Debian ships libudev.pc with Name: libudev).
+
+ -- Your Name <your@email>  Wed, 19 Feb 2026 00:00:00 +0000
