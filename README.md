@@ -103,7 +103,7 @@ Or via KDE: **System Settings → Users → Fingerprint Authentication**.
 To revert to the stock libfprint:
 
 ```bash
-sudo ./host-tools/uninstall.sh
+sudo ./tools/uninstall.sh
 ```
 
 ---
@@ -121,11 +121,81 @@ sudo ./host-tools/uninstall.sh
 
 ---
 
-## 6. What's Next
+## 6. A/B Testing Pipeline
+
+The GF511 sensor produces low-resolution 64×80 images. Small changes to the
+preprocessing pipeline (sharpening boost, contrast stretch, crop margins) can
+dramatically affect match rates. The repo includes an offline A/B testing setup
+that captures raw sensor frames once and replays them through different
+preprocessing configurations — removing finger placement variation from the
+comparison.
+
+### Architecture
+
+```
+  Sensor                    Offline (no sensor needed)
+  ──────                    ──────────────────────────
+  capture-corpus.sh    →    replay-pipeline    →    sigfm-batch
+  (raw .bin + PGM)          (raw → PGM)             (PGM → scores + FRR)
+```
+
+**Component A — Capture** (`tools/capture-corpus.sh`):
+Runs `img-capture` in a loop, saving both the driver-processed PGM and the raw
+pre-processed frame (via `FP_SAVE_RAW`). Each raw frame is a 14,080-byte
+uint16 LE array (88×80 pixels, post-calibration-subtract, pre-squash/sharpen/crop).
+
+**Component B — Replay** (`tools/replay-pipeline`):
+Reads raw `.bin` frames and `calibration.bin`, then applies the same preprocessing
+steps as `goodix5xx.c` with configurable parameters. This lets you compare
+e.g. `--boost=2` (current) vs `--boost=10` (Windows-style) on identical sensor data.
+
+**Component C — Benchmark** (`tools/sigfm-batch`):
+Takes PGM files, splits them into enrollment and verification sets, runs the full
+SIGFM matching pipeline (FAST-9 + BRIEF-256), and reports per-frame scores and FRR.
+
+### Quick Start
+
+```bash
+# 1. Build tools
+make -C tools
+
+# 2. Capture 20 frames (press finger once per capture)
+./tools/capture-corpus.sh ./corpus/baseline 20
+
+# 3. Benchmark driver-produced PGMs directly
+./tools/sigfm-batch \
+    --enroll  corpus/baseline/capture_000{1..9}.pgm corpus/baseline/capture_0010.pgm \
+    --verify  corpus/baseline/capture_001{1..9}.pgm corpus/baseline/capture_0020.pgm \
+    --score-threshold=40
+
+# 4. Replay raw frames with a different boost factor
+./tools/replay-pipeline --batch corpus/baseline --boost=10 -o corpus/boost10
+
+# 5. Benchmark replayed frames
+./tools/sigfm-batch \
+    --enroll  corpus/boost10/0001.pgm corpus/boost10/0002.pgm ... \
+    --verify  corpus/boost10/0011.pgm corpus/boost10/0012.pgm ... \
+    --score-threshold=40
+```
+
+### Interpreting Results
+
+- **Keypoints**: FAST-9 corners detected. Healthy range: 60–128 (capped at 128).
+  Below 25 → frame rejected as too few features.
+- **Score**: Count of geometrically consistent angle-pairs from matched BRIEF
+  descriptors. Scale is O(n²) of matched features, so values range from 0 to
+  thousands. Score of 0 means fewer than 5 KNN descriptor matches were found.
+- **FRR**: False Rejection Rate — percentage of genuine verification attempts
+  that failed to match. The target is <10%.
+
+---
+
+## 7. What's Next
 
 See [ACTION_PLAN.md](ACTION_PLAN.md) for the full phase status and pre-MR checklist.
 
 Remaining before upstream MR:
+- Reduce FRR from current baseline (~60–90%) to <10% via preprocessing tuning
 - Write MR description, credit original authors
 - Ping `@hadess` on the MR
 - Push branch to a public remote and update `packaging/aur/PKGBUILD` `url=`
@@ -133,7 +203,7 @@ Remaining before upstream MR:
 
 ---
 
-## 7. Reference Documents
+## 8. Reference Documents
 
 | Document | Contents |
 |---|---|
@@ -144,4 +214,5 @@ Remaining before upstream MR:
 | [analysis/08-session-findings-and-bug-fixes.md](analysis/08-session-findings-and-bug-fixes.md) | Three bugs found & fixed |
 | [analysis/10-nbis-viability-test.md](analysis/10-nbis-viability-test.md) | Why NBIS can't work on this sensor |
 | [analysis/12-packaging-aur-debian.md](analysis/12-packaging-aur-debian.md) | AUR PKGBUILD + Debian packaging analysis |
+| [analysis/14-testing-and-benchmarking-strategy.md](analysis/14-testing-and-benchmarking-strategy.md) | Full A/B testing design rationale |
 | [analysis/07-devcontainer-handoff.md](analysis/07-devcontainer-handoff.md) | Container setup & USB passthrough details |

@@ -1,13 +1,20 @@
+capture-samples/
+corpus/
+
 # Build outputs
 libfprint-fork/build/
 nbis-test/nbis-bozorth3-test
 nbis-test/nbis-minutiae-test
+tools/sigfm-batch
+tools/replay-pipeline
 
-# Loose scratch files at repo root (canonical copies live in test-data/)
+# Loose scratch files at repo root
 /enrolled.pgm
 /test-storage.variant
 /clear.png
 /fingerprint.png
+/finger.pgm
+/finger.log
 
 # AUR makepkg clone directory (created by makepkg -s)
 packaging/aur/libfprint-goodixtls511-git/
