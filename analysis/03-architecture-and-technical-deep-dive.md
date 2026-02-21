@@ -12,11 +12,12 @@
 ├──────────────────────────────────────────────────┤
 │                  libfprint                         │
 │    ┌──────────────────────────────────────┐       │
-│    │   goodixtls driver (community fork)  │       │
-│    │   - TLS handshake with sensor MCU    │       │
-│    │   - Image capture (80×64 raw)        │       │
-│    │   - Image processing (OpenCV)        │       │
-│    │   - Minutiae detection (NBIS/sigfm)  │       │
+│    │   goodixtls driver (community fork)    │       │
+│    │   - TLS handshake with sensor MCU      │       │
+│    │     (GnuTLS custom transport)           │       │
+│    │   - Image capture (80×64 raw)            │       │
+│    │   - Image processing (pure C)            │       │
+│    │   - SIGFM matching (FAST-9+BRIEF-256)   │       │
 │    └──────────────────────────────────────┘       │
 ├──────────────────────────────────────────────────┤
 │              USB Interface (libgusb)              │
@@ -34,9 +35,13 @@ The Goodix fingerprint sensors communicate over USB using a **TLS-encrypted chan
 
 **Key aspects:**
 - Sensor has its own MCU (microcontroller unit)
-- Communication is wrapped in TLS 1.2 (using OpenSSL/NSS)
+- Communication is wrapped in TLS 1.2
+  - **Current working tree:** GnuTLS with custom in-memory transport callbacks (no threads)
+  - **0x00002a fork (original):** OpenSSL BIO pair + pthread
+  - **Upstream libfprint:** Now uses OpenSSL by default (confirmed by @3v1n0, Mar 2025)
 - Firmware must be extracted from a Windows driver and flashed to the sensor before Linux can communicate
 - The `goodix-fp-dump` project handles the protocol RE and firmware management
+- TLS cipher: `TLS_PSK_WITH_AES_128_CBC_SHA256` (PSK-based, no certificates)
 
 ### 2. Firmware Flashing (`goodix-fp-dump`)
 
@@ -56,35 +61,61 @@ The sensor ships configured for Windows. To use it on Linux:
 The 80×64 raw image from the sensor goes through several processing stages:
 
 ```
-Raw capture (80×64)
+Raw capture (88×80 × 16-bit)
     │
     ▼
-Preprocessing (preprocessor.py / OpenCV in libfprint)
-    │  - Cropping
-    │  - Thresholding
-    │  - Mean filtering
+Calibration subtract (linear_subtract_inplace)
+    │  - subtract per-pixel calibration frame in 16-bit space
     ▼
-Minutiae extraction (NBIS bozorth3 / sigfm)
+Normalise (squash_frame_linear)
+    │  - per-frame min→max linear stretch → 8-bit
+    ▼
+Crop (crop_frame)
+    │  - discard 24 guard columns (88→64 px wide)
+    ▼
+FpImage (64×80, 8-bit, 508 DPI)
     │
+    ▼
+SIGFM feature extraction (FAST-9 + BRIEF-256)
+    │  - pure C, ~3ms per frame
+    │  - no OpenCV dependency
     ▼
 Template matching (enrollment / verification)
 ```
 
-**The OpenCV dependency is critical** — it handles image enhancement that makes the low-resolution captures usable. The `sigfm` (signal feature matching) approach in 0x00002a's fork was developed specifically because standard minutiae extraction (NBIS/bozorth3) struggles with 80×64 images.
+**NBIS/bozorth3 minutiae detection is non-viable** at this resolution — mindtct yields 0–2 minutiae per frame regardless of upscaling (see [10-nbis-viability-test.md](10-nbis-viability-test.md)). The **SIGFM** (Signal Feature Matching) algorithm was developed specifically to solve this. The current working tree uses a pure-C implementation (FAST-9 keypoint detector + BRIEF-256 binary descriptor); the original 0x00002a fork used C++/OpenCV SIFT.
 
-### 4. The `sigfm` Branch (0x00002a)
+### 4. SIGFM — Signal Feature Matching
 
-The `0x2a/dev/goodixtls-sigfm` branch (228 commits ahead of the main community fork) represents the most advanced development:
+SIGFM is a **non-minutiae fingerprint matching algorithm** designed for very low resolution sensors where NBIS cannot extract enough structural features.
 
-- **Signal Feature Matching:** Alternative to minutiae-based matching that works better at very low resolutions
-- **OpenCV integration:** Uses OpenCV for image processing at the C level within libfprint
-- **This is the branch the AUR package builds from**
+**Current working tree (`goodixtls-on-1.94.9`):**
+- Pure C implementation: FAST-9 keypoint detection + BRIEF-256 binary descriptors
+- ~665 lines (`sigfm/sigfm.c` + `sigfm/sigfm.h`)
+- No external dependencies (no OpenCV, no C++)
+- License: LGPL-2.1-or-later
+- Feature extraction: ~3ms per frame
+- 20 frames enrolled per finger
+
+**0x00002a/libfprint fork (original):**
+- C++ implementation using OpenCV SIFT
+- Required `cpp_std=c++17`, OpenCV runtime dependency
+- This is the branch the AUR package (`libfprint-goodixtls-git`) still builds from
+
+**Upstream validation:** @benzea (upstream libfprint owner, Sep 2021): *"What we really need is someone implementing an algorithm that really works well with a single frame. Minutiae based matching just isn't going to cut it for that image size."*
 
 ### 5. Build System
 
 The project uses **Meson** as its build system (inherited from upstream libfprint).
 
-Key build dependencies (from AUR PKGBUILD):
+Key build dependencies:
+
+**Current working tree (`goodixtls-on-1.94.9`):**
+- `libgudev`, `libgusb` — USB device interaction
+- `gnutls` — TLS communication with sensor
+- `meson` — build system
+
+**0x00002a fork (AUR package source):**
 - `libgudev`, `libgusb` — USB device interaction
 - `nss` + `openssl` — TLS communication with sensor
 - `pixman` — pixel manipulation
@@ -162,10 +193,10 @@ goodixtls — Open-Source Path
 ──────────────────────────────────────────
 ┌──────────────────────────────────────────┐
 │             fprintd / libfprint (fork)           │
-│     (community fork with goodixtls driver)      │
+│     (community fork with goodixtls driver)       │
 ├──────────────────────────────────────────┤
 │   Reverse-engineered TLS protocol + SIGFM        │
-│   OpenCV image processing + custom matching      │
+│   Pure-C FAST-9+BRIEF-256, GnuTLS transport     │
 └──────────────────────────────────────────┘
 ↑ Used by: 27c6:5110, 5117, 5120, 521d (MOH sensors)
 ✓ The ONLY option for 5110

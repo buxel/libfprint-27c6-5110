@@ -28,7 +28,8 @@ The Goodix fingerprint Linux support effort is a community-driven project spanni
 - **libfprint** (official): [gitlab.freedesktop.org/libfprint/libfprint](https://gitlab.freedesktop.org/libfprint/libfprint)
   - The canonical fingerprint reader library for Linux.
   - `27c6:5110` is **not** in the supported device list.
-  - No active MR or development effort visible upstream for Goodix TLS devices.
+  - **[MR !418](https://gitlab.freedesktop.org/libfprint/libfprint/-/merge_requests/418)** (Nov 2022, by @0x00002a): *"add sigfm algorithm implementation"* — status: Failed (pipeline).
+  - **[Issue #376](https://gitlab.freedesktop.org/libfprint/libfprint/-/issues/376)** (Apr 2021–present): 55 participants, 31 upvotes. @benzea (upstream owner) explicitly called for a non-minutiae single-frame algorithm.
 
 ### Community Development Repositories
 
@@ -85,14 +86,18 @@ The Discord channel is **low-activity**. Last notable messages (Aug 2025 – Feb
 
 | Person | GitHub Handle | Role |
 |---|---|---|
-| Matthieu Charette | [@mpi3d](https://github.com/mpi3d) | Lead of goodix-fp-dump, core protocol reverse-engineering |
-| voidstar / 0x00002a | [@0x00002a](https://github.com/0x00002a) | AUR package maintainer, sigfm branch developer |
+| Matthieu Charette | [@mpi3d](https://github.com/mpi3d) | Lead of goodix-fp-dump, core protocol reverse-engineering, issue #376 author |
+| Benjamin Berg | @benzea | **Upstream libfprint owner** — called for non-minutiae algorithm (Sep 2021) |
+| Marco Trevisan | @3v1n0 | **Upstream libfprint owner** — confirmed OpenSSL migration (Mar 2025) |
+| Bastien Nocera (hadess) | [@hadess](https://github.com/hadess) | **Upstream libfprint maintainer** — participant on PR #32 |
+| Alexander Meiler | @delanodev | Early protocol RE: firmware read, calibration, first fingerprint images (May 2021) |
+| Thomas Lambertz | @tlambertz | Protocol RE: discovered TLS-over-USB with PSK (Apr 2021) |
+| voidstar / 0x00002a | [@0x00002a](https://github.com/0x00002a) | AUR package maintainer, sigfm branch developer, MR !418 author |
 | rootd | [@rootd](https://github.com/rootd) | Earlier libfprint fork maintainer |
 | d-k-bo | [@d-k-bo](https://github.com/d-k-bo) | Fedora COPR packager (now inactive) |
 | EliaGeretto | [@EliaGeretto](https://github.com/EliaGeretto) | Contributor to goodix-fp-dump |
 | gulp | [@gulp](https://github.com/gulp) | Active contributor (Jan 2026) — adding 5117 support via [PR #32](https://github.com/goodix-fp-linux-dev/libfprint/pull/32) |
 | egormanga | [@egormanga](https://github.com/egormanga) | Project member, code reviewer on PR #32 |
-| Bastien Nocera (hadess) | [@hadess](https://github.com/hadess) | **Upstream libfprint maintainer** — participant on PR #32 |
 
 ## Sources
 

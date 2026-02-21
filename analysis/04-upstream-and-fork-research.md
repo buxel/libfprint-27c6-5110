@@ -198,6 +198,8 @@ It uses only the standard driver API (`FpImageDevice`, `FpiSsm`, `FpiUsbTransfer
 
 ## 8. The sigfm Addition (0x00002a fork only)
 
+> **⚠️ Note (Feb 2026):** The information below describes the *original* SIGFM implementation in the 0x00002a fork. The local working tree (`goodixtls-on-1.94.9` branch) has since **rewritten SIGFM as pure C** (FAST-9 + BRIEF-256, ~665 lines, no OpenCV dependency, no C++). The file listing below is historical.
+
 The `0x2a/dev/goodixtls-sigfm` branch adds a **`sigfm`** (Signal Fingerprint Matching) subsystem:
 
 | File | Purpose |
@@ -210,20 +212,26 @@ The `0x2a/dev/goodixtls-sigfm` branch adds a **`sigfm`** (Signal Fingerprint Mat
 | `sigfm/tests-embedded.hpp` | Test helpers |
 | `sigfm/meson.build` | Build integration |
 
-This is a **separate concern** from the goodixtls driver itself — it's an alternative fingerprint matching approach. It's written in C++ (requiring `cpp_std=c++17`) and is linked as `libsigfm`.
+This is a **separate concern** from the goodixtls driver itself — it's an alternative fingerprint matching approach. The original version was written in C++ (requiring `cpp_std=c++17`) and linked as `libsigfm`.
 
-**For porting the goodixtls driver, sigfm is NOT required.** It's an optional enhancement specific to the 0x00002a fork.
+> **⚠️ Correction (Feb 2026):** SIGFM **is required** for the 5110 sensor. NBIS has been conclusively proven non-viable — mindtct yields 0–2 minutiae at any upscale factor (see [10-nbis-viability-test.md](10-nbis-viability-test.md)). @benzea (upstream owner) stated: *"What we really need is someone implementing an algorithm that really works well with a single frame. Minutiae based matching just isn’t going to cut it for that image size."*
 
 ---
 
 ## 9. Conclusions for Implementation Strategy
 
+> **⚠️ Update (Feb 2026):** Several conclusions below are now outdated. The local working tree (`goodixtls-on-1.94.9` branch) has addressed the key issues:
+> - TLS migrated from OpenSSL to **GnuTLS** (in-memory custom transport, no pthreads)
+> - SIGFM rewritten from C++/OpenCV to **pure C** (FAST-9 + BRIEF-256)
+> - Rebased onto **libfprint 1.94.9** (was 1.94.5)
+> - All GCC 15 compatibility issues fixed
+
 ### Driver Self-Containment: **HIGH**
-- 10 files, all in `drivers/goodixtls/`
+- 10 files, all in `drivers/goodixtls/` (+ 3 SIGFM files in `sigfm/`)
 - Clean layered architecture with well-defined boundaries
 - Uses only standard libfprint driver APIs
-- External deps: OpenSSL + pthreads (both widely available)
-- No sigfm dependency for basic operation
+- External deps: GnuTLS (current working tree) or OpenSSL + pthreads (0x00002a fork)
+- SIGFM is required for matching (NBIS non-viable at 64×80 resolution)
 
 ### Portability to Current Upstream: **FEASIBLE but requires work**
 - Fork is 5 releases behind (1.94.5 → 1.94.10)
@@ -232,9 +240,9 @@ This is a **separate concern** from the goodixtls driver itself — it's an alte
 - Main risk: subtle API changes in `fpi-*.h` private headers between versions
 
 ### Options for Integration:
-1. **Rebase onto upstream 1.94.10** — Port the 10 driver files + add to `libfprint/meson.build` and root `meson.build`
-2. **Use as-is with the fork** — Ship the fork's libfprint 1.94.5 (older but known-working)
+1. **Rebase onto upstream 1.94.10** — Port the driver files + add to `libfprint/meson.build` and root `meson.build`. The current working tree on 1.94.9 is only 1 release behind.
+2. **Use as-is with the fork** — Ship the fork's libfprint 1.94.9 (known-working)
 3. **Standalone out-of-tree driver** — Would require significant refactoring since the GObject type registration is done at build time via `fpi-drivers.c` generation
 
 ### Critical Missing Piece:
-The goodix-fp-linux-dev/libfprint **master branch does NOT contain the goodixtls driver**. The driver only exists in the 0x00002a fork's `0x2a/dev/goodixtls-sigfm` branch. This means the "community" driver never made it back to the main community org.
+The goodix-fp-linux-dev/libfprint **master branch does NOT contain the goodixtls driver**. The driver only exists in the 0x00002a fork's `0x2a/dev/goodixtls-sigfm` branch (C++/OpenCV version) and in our local working tree (`goodixtls-on-1.94.9`, pure-C version).
