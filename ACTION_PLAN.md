@@ -53,8 +53,9 @@ Detailed porting plan: `analysis/09-upstream-porting-plan.md`
 | 6 | AUR packaging | ✅ Done (not yet published) |
 | 7 | Upstream submission | ⏳ Optional — deprioritised |
 | 8 | SIGFM Phase 1 improvements | ✅ Done (FRR 90% → 0%) |
-| 9 | AUR publish | ⬜ Next — primary distribution goal |
-| 10 | Validation (larger corpus) | ⬜ Pending |
+| 9 | AUR publish | ⬜ Blocked on Phase 11 |
+| 10 | Validation (larger corpus) | ✅ Done (results in doc 14) |
+| 11 | SIGFM Phase 2: RANSAC geometric verification | ⬜ Next — **blocking** |
 
 ---
 
@@ -264,21 +265,85 @@ All fixed, reducing FRR from 90% to 0% on a 20-frame corpus.
 
 ---
 
-## Phase 10 — Validation ⬜ Pending
+## Phase 10 — Validation ✅ Done
 
-Phase 8 achieved 0% FRR on a 20-frame single-session corpus. This is promising
-but insufficient to declare the driver production-quality.
+**Full results:** `analysis/14-sigfm-benchmark-results.md`
 
-### Required
+5-finger corpus captured (145 PGMs across right-thumb, right-index, right-middle,
+right-ring, right-little, ~30 captures each). Both genuine (FRR) and impostor (FAR)
+tests completed.
 
-- [ ] Capture 50+ frame corpus across varied conditions (pressure, placement, moisture)
+### Results
+
+- [x] 145-frame corpus captured across 5 fingers (varied placement)
+- [x] Genuine match test: **overall FRR = 13.7%** (0% thumb/little, 16% index/ring, 35% middle)
+- [x] Impostor test: **FAR = 45.7%** at threshold=40 — unacceptable
+- [x] Score distribution analysis: EER ≈ 25% at threshold ~75
+- [x] FAR=0% requires threshold > 991, giving FRR = 58.9%
+
+### Verdict
+
+The matcher cannot discriminate between different fingers of the same person.
+The `geometric_score()` function uses pairwise angle-counting rather than
+rigid transform verification, producing false matches from random descriptor
+correlations. **Phase 11 (RANSAC) is required before AUR publish.**
+
+### Remaining validation items
+
 - [ ] Cross-session test: re-enroll, capture verify corpus on a different day
-- [ ] Re-run `sigfm-batch` on larger corpus to confirm FRR holds
-
-### Optional
-
-- [ ] Impostor test (second finger corpus) for FAR measurement
+- [ ] Re-test after Phase 11 RANSAC improvements
 - [ ] Test on other 51xx VID/PID variants (5117, 5120, 521d) if hardware available
+
+---
+
+## Phase 11 — SIGFM Phase 2: RANSAC Geometric Verification ⬜ Next
+
+**Blocking:** Must be completed before AUR publish (Phase 9).
+**Full diagnosis:** `analysis/14-sigfm-benchmark-results.md` §5
+
+Phase 10 validation revealed that the current `geometric_score()` in `sigfm.c`
+cannot discriminate between different fingers (FAR=45.7%). The pairwise
+angle-counting approach is fundamentally weak — random descriptor matches
+produce O(n²) angle-entries, of which some fraction agree by chance.
+
+### Required Changes
+
+| # | Change | File | Impact |
+|---|--------|------|--------|
+| 1 | Replace `geometric_score()` with RANSAC rigid transform inlier counting | `sigfm.c` | Primary FAR fix |
+| 2 | Lower `RATIO_TEST` from 0.90 toward 0.80 | `sigfm.c` | Fewer but cleaner matches |
+| 3 | Score = inlier count (0–128) instead of angle-pair agreements | `sigfm.c` | Interpretable scores |
+| 4 | Re-calibrate `score_threshold` in driver | `goodix511.c` | Adapt to new score scale |
+
+### RANSAC Algorithm (2-point rigid transform)
+
+```
+for N iterations (e.g., 100):
+    pick 2 random matches (4 points: 2 in frame, 2 in enrolled)
+    estimate rotation θ and translation (tx, ty) from the 2-point correspondence
+    count inliers: matches where |T(frame_kp) - enrolled_kp| < ε (e.g., 3 px)
+    keep best inlier count
+score = best inlier count
+```
+
+Expected outcome: genuine → 15–50 inliers, impostor → 0–2 inliers.
+Clean separation, no overlap.
+
+### Optional enhancements (deferred until RANSAC is validated)
+
+- Oriented BRIEF (ORB-style rotation normalization) — reduces FRR from placement rotation
+- Adaptive ε based on image quality
+
+### Scope estimate
+
+~150 lines of C replacing `geometric_score()`. No API changes, no serialisation
+changes, no new dependencies. Rebuild + re-test with existing corpus.
+
+### Acceptance criteria
+
+- FAR < 1% at a threshold where FRR < 5%
+- Re-run `run-tests.sh` and `score-analysis.sh` on `corpus/5finger/`
+- Clean impostor separation: max impostor score well below min genuine score
 
 ---
 
@@ -306,9 +371,10 @@ but insufficient to declare the driver production-quality.
 1. ~~**GnuTLS PSK-DHE compatibility**~~ — ✅ Resolved. The driver works end-to-end
    (enroll + verify on CachyOS host), confirming GnuTLS PSK-DHE negotiation succeeds
    against the GF511 firmware.
-2. **Score threshold calibration** — `score_threshold = 24` works (Phase 8 min score
-   was 47 at threshold 40), but hasn't been formally calibrated across diverse captures.
-   Deferred until Phase 10 validation with a larger corpus.
+2. **Score threshold calibration** — Phase 10 validation (doc 14) showed the current
+   threshold is meaningless: genuine and impostor distributions overlap from 0 to 991.
+   EER ≈ 25% at threshold ~75. Will be re-calibrated after Phase 11 RANSAC changes
+   the score metric to inlier count.
 3. **Serialisation version bump** — enrolled prints from the C++ SIFT implementation
    (v1) are incompatible with the pure-C BRIEF implementation (v2). Users must delete
    `/var/lib/fprint/` prints and re-enroll. Needs user-facing documentation in the AUR
@@ -330,9 +396,12 @@ but insufficient to declare the driver production-quality.
 
 ## Deferred Improvements (from doc 13 — Windows Driver Analysis)
 
-Phase 8 achieved 0% FRR. The following improvements from `analysis/13-windows-driver-algorithm-analysis.md`
-are kept in the plan until Phase 10 validation confirms the current implementation is
-sufficient with a larger, cross-session corpus.
+Phase 10 validation showed that the current matcher has **unacceptable FAR (45.7%)**.
+However, none of the deferred items below address the FAR problem — they all target
+FRR or image quality. The FAR fix (RANSAC) is tracked in **Phase 11** above.
+See `analysis/14-sigfm-benchmark-results.md` §5 for the full assessment.
+
+These items remain deferred until Phase 11 resolves the FAR problem.
 
 | # | Algorithm | Status | Notes |
 |---|-----------|--------|-------|
@@ -392,3 +461,4 @@ confirmed with more data.
 | 2026-02-22 | Phase 8 complete: SIGFM Phase 1 improvements. Three fixes in `sigfm.c` (ratio test, descriptor source, NMS) + unsharp boost 2→4 in `goodix5xx.c`. FRR: 90% → 0%. Fork commit `a0b2589`, parent commit `1086271`. |
 | 2026-02-22 | Live sensor test passed: fprintd installed, ldconfig configured for `/usr/local/lib` priority, enroll + verify works end-to-end with Phase 8 improvements. |
 | 2026-02-22 | Full action plan review. All 17 analysis docs audited for open items. Goal refocused: AUR publish is primary, upstream MR is secondary. Open Question #1 (GnuTLS PSK-DHE) resolved. Added Phases 9 (AUR publish) and 10 (validation). Community engagement items postponed. Windows algorithm improvements deferred pending Phase 10 validation. PSK flashing requirement documented (OQ #6). |
+| 2026-02-22 | Phase 10 validation complete. 5-finger corpus (145 PGMs): FRR=13.7%, **FAR=45.7%**. Impostor scores overlap genuine scores heavily (EER≈25%). Root cause: `geometric_score()` uses pairwise angle-counting, not rigid transform verification. None of the deferred doc-13 items address FAR. Added Phase 11 (RANSAC geometric verification) as blocking prerequisite for AUR publish. Phase 9 now blocked on Phase 11. Full results: `analysis/14-sigfm-benchmark-results.md`. |
