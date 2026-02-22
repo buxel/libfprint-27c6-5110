@@ -5,16 +5,16 @@
 # Each capture triggers one sensor read; you press your finger once per capture.
 #
 # Usage:
-#   ./tools/capture-corpus.sh [CORPUS_DIR] [N_FRAMES]
+#   ./tools/benchmark/capture-corpus.sh [CORPUS_DIR] [N_FRAMES]
 #
 # Example:
-#   ./tools/capture-corpus.sh ./corpus/baseline 20
-#   ./tools/capture-corpus.sh ./corpus/baseline     # default: 20 frames
+#   ./tools/benchmark/capture-corpus.sh ./corpus/baseline 20
+#   ./tools/benchmark/capture-corpus.sh ./corpus/baseline     # default: 20 frames
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUILD_DIR="${LIBFPRINT_BUILD_DIR:-$REPO_ROOT/libfprint-fork/build}"
 BIN="$BUILD_DIR/examples/img-capture"
 
@@ -76,8 +76,8 @@ echo "  Calibration: $CAL"
 echo ""
 echo "  Next steps:"
 echo "    # Replay with default preprocessing:"
-echo "    ./tools/replay-pipeline --batch $CORPUS_DIR"
+echo "    ./tools/benchmark/replay-pipeline --batch $CORPUS_DIR"
 echo ""
 echo "    # Run SIGFM benchmark (split into enroll + verify sets):"
-echo "    ./tools/sigfm-batch --enroll $CORPUS_DIR/capture_000{1..9}.pgm $CORPUS_DIR/capture_0010.pgm \\"
-echo "                             --verify $CORPUS_DIR/capture_001{1..9}.pgm $CORPUS_DIR/capture_0020.pgm"
+echo "    ./tools/benchmark/sigfm-batch --enroll $CORPUS_DIR/capture_000{1..9}.pgm $CORPUS_DIR/capture_0010.pgm \\"
+echo "                                      --verify $CORPUS_DIR/capture_001{1..9}.pgm $CORPUS_DIR/capture_0020.pgm"

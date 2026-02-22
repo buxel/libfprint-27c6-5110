@@ -37,7 +37,7 @@ electrodes, not additional sensing area for SR.
 
 ## 2. NBIS Minutiae Test Results
 
-A standalone test program ([`/workspace/nbis-test/nbis-minutiae-test.c`](../nbis-test/nbis-minutiae-test.c))
+A standalone test program ([`tools/nbis-test/nbis-minutiae-test.c`](../tools/nbis-test/nbis-minutiae-test.c))
 was built directly against the bundled NBIS C sources (`libfprint/nbis/mindtct/` ×26 files +
 `bozorth3/` ×6 files) to call `get_minutiae()` with the same `g_lfsparms_V2` parameters
 libfprint uses internally.
@@ -62,7 +62,7 @@ requires a minimum of ~8 reliable minutiae in each print to produce a meaningful
 
 ### Bozorth3 match test
 
-Test binary: [`/workspace/nbis-test/nbis-bozorth3-test.c`](../nbis-test/nbis-bozorth3-test.c)
+Test binary: [`tools/nbis-test/nbis-bozorth3-test.c`](../tools/nbis-test/nbis-bozorth3-test.c)
 
 ```
 === NBIS bozorth3 match test ===
@@ -217,7 +217,7 @@ Per [09-upstream-porting-plan.md](09-upstream-porting-plan.md):
 ## 7. Test Artifacts
 
 ```
-/workspace/nbis-test/
+tools/nbis-test/
   Makefile               — builds against bundled libfprint NBIS sources, no extra deps
   nbis-minutiae-test.c   — calls get_minutiae() on a PGM at any scale/ppmm
   nbis-bozorth3-test.c   — runs full enroll→verify bozorth3 pipeline on two PGMs
@@ -225,7 +225,7 @@ Per [09-upstream-porting-plan.md](09-upstream-porting-plan.md):
 
 Build:
 ```bash
-cd /workspace/nbis-test && make
+cd tools/nbis-test && make
 ```
 
 Reproduce results:

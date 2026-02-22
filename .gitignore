@@ -3,10 +3,10 @@ corpus/
 
 # Build outputs
 libfprint-fork/build/
-nbis-test/nbis-bozorth3-test
-nbis-test/nbis-minutiae-test
-tools/sigfm-batch
-tools/replay-pipeline
+tools/nbis-test/nbis-bozorth3-test
+tools/nbis-test/nbis-minutiae-test
+tools/benchmark/sigfm-batch
+tools/benchmark/replay-pipeline
 
 # Loose scratch files at repo root
 /enrolled.pgm

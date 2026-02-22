@@ -8,7 +8,7 @@
 # For capturing many frames for offline A/B testing, use capture-corpus.sh instead.
 #
 # Usage:
-#   ./tools/debug-capture.sh [output.pgm]
+#   ./tools/scripts/debug-capture.sh [output.pgm]
 #
 # Optional environment variables:
 #   LIBFPRINT_BUILD_DIR    path to build dir (default: ./libfprint-fork/build)
@@ -16,13 +16,13 @@
 #   CAPTURE_MODE           'capture' (default), 'enroll', or 'verify'
 #
 # Example:
-#   ./tools/debug-capture.sh capture-1.pgm
-#   CAPTURE_MODE=enroll ./tools/debug-capture.sh
+#   ./tools/scripts/debug-capture.sh capture-1.pgm
+#   CAPTURE_MODE=enroll ./tools/scripts/debug-capture.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUILD_DIR="${LIBFPRINT_BUILD_DIR:-$REPO_ROOT/libfprint-fork/build}"
 MODE="${CAPTURE_MODE:-capture}"
 OUTPUT_FILE="${1:-finger.pgm}"

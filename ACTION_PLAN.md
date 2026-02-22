@@ -50,7 +50,7 @@ Detailed porting plan: `analysis/09-upstream-porting-plan.md`
 | 4 | Build system (`meson.build`) cleanup | ✅ Done |
 | 5 | Thermal fix (1 line) | ✅ Done |
 | 5.5 | Host fprintd integration | ✅ Done |
-| 6 | AUR + Debian packaging | ✅ Done (not yet published) |
+| 6 | AUR packaging | ✅ Done (not yet published) |
 | 7 | Upstream submission | ⏳ Optional — deprioritised |
 | 8 | SIGFM Phase 1 improvements | ✅ Done (FRR 90% → 0%) |
 | 9 | AUR publish | ⬜ Next — primary distribution goal |
@@ -75,7 +75,7 @@ Super-resolution is also not viable:
 **Consequence for plan:** Phase 3 is now "replace SIGFM with a pure-C keypoint matcher
 (ORB)", not "drop SIGFM and use NBIS".
 
-**Artifacts:** `nbis-test/` (test binaries + Makefile)  
+**Artifacts:** `tools/nbis-test/` (test binaries + Makefile)  
 **Full findings:** `analysis/10-nbis-viability-test.md`
 
 ---
@@ -175,19 +175,17 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 
 ---
 
-## Phase 6 — AUR + Debian Packaging ✅ Done
+## Phase 6 — AUR Packaging ✅ Done
 
-**Files:** `packaging/aur/PKGBUILD`, `packaging/debian/debian/`  
+**Files:** `packaging/aur/PKGBUILD`  
 **Full analysis:** `analysis/12-packaging-aur-debian.md`
 
 ### What was done
 
 | Item | Details |
-|------|--------|
+|------|---------|
 | `meson.build` udev fix | `dependency('udev', 'libudev')` fallback at all 3 call sites — commit `7f6c089` |
 | AUR PKGBUILD | `packaging/aur/PKGBUILD` — `provides`/`conflicts`/`replaces` set; 3 runtime deps only; correct `meson setup` invocation |
-| Debian skeleton | `packaging/debian/debian/{control,rules,changelog,copyright,source/format}` — `debhelper-compat 13`, `Conflicts`/`Replaces`/`Provides: libfprint-2-2` |
-| No Debian patch needed | udev fix already applied in-tree; `debian/patches/` not required |
 
 ### AUR (`libfprint-goodixtls511-git`)
 
@@ -195,13 +193,6 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 - `depends`: `libgusb gnutls libgudev` — 3 packages only (no opencv, openssl, doctest, nss, pixman)
 - `build()`: `meson setup --prefix=/usr -Dgoodixtls=enabled -Dc_args="-Wno-error=incompatible-pointer-types"` then `ninja`
 - **TODO before AUR publish:** push branch to a public remote; update `url=` in PKGBUILD; run `makepkg --printsrcinfo > .SRCINFO`
-
-### Debian/Ubuntu
-
-- `Build-Depends`: `libglib2.0-dev libgusb-dev libgnutls28-dev libgudev-1.0-dev libudev-dev meson ninja-build`
-- `Conflicts`/`Replaces`/`Provides: libfprint-2-2` so `apt` swaps the official package cleanly
-- The `udev`→`libudev` fix is in `meson.build` directly; no `debian/patches/` needed
-- Build with: `dpkg-buildpackage -us -uc -b` from the source root
 
 ---
 
@@ -396,7 +387,7 @@ confirmed with more data.
 | 2026-02-19 | History squashed: fix commit folded into driver commit. Final 4 commits: `811160f` (fpi-device), `cf77a87` (sigfm), `8fea0a5` (goodixtls511 driver + hw fixes), `9992fc1` (hwdb + .clang-format + autosuspend.hwdb). Tests: 3/3 pass. |
 | 2026-02-19 | Two additional commits: `9399dce` (meson: libudev fallback — Phase 6), `e369029` (rename bz3_threshold→score_threshold across all drivers). `834f5f9` (autosuspend.hwdb regeneration) squashed into `9992fc1`. Final 6 commits above v1.94.9. |
 | 2026-02-19 | Host fprintd integration complete: `install.sh` deployed to CachyOS host, finger enrolled via KDE fingerprint settings, used to unlock screen. End-to-end pipeline confirmed on host with fprintd 1.94.5 + our libfprint `.so`. Note: `pacman -Syu` upgrades to `libfprint 1.94.10` overwrite our `.so`; re-run `install.sh` after each upgrade until MR is merged. |
-| 2026-02-19 | Phase 6 complete: AUR PKGBUILD (`packaging/aur/PKGBUILD`) and Debian skeleton (`packaging/debian/debian/`) created. meson.build patched with `dependency('udev', 'libudev')` fallback at 3 sites (commit `7f6c089`); no debian/patches needed. |
+| 2026-02-19 | Phase 6 complete: AUR PKGBUILD (`packaging/aur/PKGBUILD`) created. meson.build patched with `dependency('udev', 'libudev')` fallback at 3 sites (commit `7f6c089`). |
 | 2026-02-21 | A/B testing infrastructure built: raw frame dump in driver (`FP_SAVE_RAW`), `tools/replay-pipeline`, `tools/sigfm-batch`, `tools/capture-corpus.sh`. 20-frame corpus captured. Design doc: `analysis/14-testing-and-benchmarking-strategy.md`. |
 | 2026-02-22 | Phase 8 complete: SIGFM Phase 1 improvements. Three fixes in `sigfm.c` (ratio test, descriptor source, NMS) + unsharp boost 2→4 in `goodix5xx.c`. FRR: 90% → 0%. Fork commit `a0b2589`, parent commit `1086271`. |
 | 2026-02-22 | Live sensor test passed: fprintd installed, ldconfig configured for `/usr/local/lib` priority, enroll + verify works end-to-end with Phase 8 improvements. |

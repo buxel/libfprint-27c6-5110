@@ -1,5 +1,5 @@
-NBIS_ROOT = /workspace/libfprint-fork/libfprint/nbis
-FP_SRC    = /workspace/libfprint-fork/libfprint
+NBIS_ROOT = ../../libfprint-fork/libfprint/nbis
+FP_SRC    = ../../libfprint-fork/libfprint
 
 # Include paths
 CFLAGS = -O2 -g \

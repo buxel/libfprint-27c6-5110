@@ -104,7 +104,7 @@ Or via KDE: **System Settings → Users → Fingerprint Authentication**.
 To revert to the stock libfprint:
 
 ```bash
-sudo ./tools/uninstall.sh
+sudo ./tools/scripts/uninstall.sh
 ```
 
 ---
@@ -137,8 +137,8 @@ Build and run:
 
 ```bash
 make -C tools
-./tools/capture-corpus.sh ./corpus/baseline 20
-./tools/sigfm-batch \
+./tools/benchmark/capture-corpus.sh ./corpus/baseline 20
+./tools/benchmark/sigfm-batch \
     --enroll  corpus/baseline/capture_000{1..9}.pgm corpus/baseline/capture_0010.pgm \
     --verify  corpus/baseline/capture_001{1..9}.pgm corpus/baseline/capture_0020.pgm \
     --score-threshold=40
@@ -166,14 +166,14 @@ and deferred improvements.
 | Document | Contents |
 |---|---|
 | [tools/README.md](tools/README.md) | Tool usage: capture, replay, benchmark, install |
-| [packaging/README.md](packaging/README.md) | AUR PKGBUILD + Debian skeleton usage |
+| [packaging/README.md](packaging/README.md) | AUR PKGBUILD usage |
 | [ACTION_PLAN.md](ACTION_PLAN.md) | Phase status, pre-MR checklist, changelog |
 | [analysis/09-upstream-porting-plan.md](analysis/09-upstream-porting-plan.md) | Detailed MR spec |
 | [analysis/03-architecture-and-technical-deep-dive.md](analysis/03-architecture-and-technical-deep-dive.md) | Driver stack internals |
 | [analysis/08-session-findings-and-bug-fixes.md](analysis/08-session-findings-and-bug-fixes.md) | Three bugs found & fixed |
 | [analysis/10-nbis-viability-test.md](analysis/10-nbis-viability-test.md) | Why NBIS can't work on this sensor |
 | [analysis/11-windows-driver-reverse-engineering.md](analysis/11-windows-driver-reverse-engineering.md) | Windows driver runtime log analysis |
-| [analysis/12-packaging-aur-debian.md](analysis/12-packaging-aur-debian.md) | AUR PKGBUILD + Debian packaging analysis |
+| [analysis/12-packaging-aur-debian.md](analysis/12-packaging-aur-debian.md) | AUR PKGBUILD packaging analysis |
 | [analysis/13-windows-driver-algorithm-analysis.md](analysis/13-windows-driver-algorithm-analysis.md) | Decompiled Windows algorithm deep-dive |
 | [analysis/14-testing-and-benchmarking-strategy.md](analysis/14-testing-and-benchmarking-strategy.md) | Full A/B testing design rationale |
 | [analysis/07-devcontainer-handoff.md](analysis/07-devcontainer-handoff.md) | Container setup & USB passthrough details |

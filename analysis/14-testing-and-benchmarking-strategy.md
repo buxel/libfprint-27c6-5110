@@ -109,7 +109,7 @@ preprocessing functions.
 replay-pipeline --boost=10 corpus/raw_0001.bin -o processed/boost10_0001.pgm
 ```
 
-**Build:** Standalone binary, same pattern as `nbis-test/`. Directly includes the
+**Build:** Standalone binary, same pattern as `tools/nbis-test/`. Directly includes the
 relevant preprocessing functions from `goodix5xx.c` (they're pure arithmetic, no
 driver state dependencies).
 
@@ -171,7 +171,7 @@ mkdir -p corpus
 
 # Capture 50 frames (same finger, varied placement/pressure)
 # Repeat this command 50 times, pressing finger differently each time
-FP_SAVE_RAW=./corpus ./tools/debug-capture.sh finger.pgm
+FP_SAVE_RAW=./corpus ./tools/scripts/debug-capture.sh finger.pgm
 
 # Result: corpus/calibration.bin + corpus/raw_0000.bin .. raw_0049.bin
 ```
@@ -293,11 +293,11 @@ The `virtual-image` driver is powerful but has limitations for our use case:
 
 | Tool | Location | Status |
 |------|----------|--------|
-| `nbis-minutiae-test` | `nbis-test/nbis-minutiae-test.c` | Working — tested in doc-10 |
-| `nbis-bozorth3-test` | `nbis-test/nbis-bozorth3-test.c` | Working — tested in doc-10 |
-| `analyze-capture.py` | `tools/analyze-capture.py` | Working — image stats + log parsing |
-| `debug-capture.sh` | `tools/debug-capture.sh` | Working — capture + SIGFM debug log |
-| `capture-corpus.sh` | `tools/capture-corpus.sh` | Working — loop capture of N frames |
+| `nbis-minutiae-test` | `tools/nbis-test/nbis-minutiae-test.c` | Working — tested in doc-10 |
+| `nbis-bozorth3-test` | `tools/nbis-test/nbis-bozorth3-test.c` | Working — tested in doc-10 |
+| `analyze-capture.py` | `tools/scripts/analyze-capture.py` | Working — image stats + log parsing |
+| `debug-capture.sh` | `tools/scripts/debug-capture.sh` | Working — capture + SIGFM debug log |
+| `capture-corpus.sh` | `tools/benchmark/capture-corpus.sh` | Working — loop capture of N frames |
 | `replay-pipeline` | `tools/replay-pipeline.c` | Working — offline preprocessing replay |
 | `sigfm-batch` | `tools/sigfm-batch.c` | Working — enrollment/verify FRR benchmark |
 
