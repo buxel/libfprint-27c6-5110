@@ -300,11 +300,17 @@ correlations. **Phase 11 (RANSAC) is required before AUR publish.**
 
 **Blocking:** Must be completed before AUR publish (Phase 9).
 **Full diagnosis:** `analysis/14-sigfm-benchmark-results.md` §5
+**Strategy & Windows decompilation evidence:** `analysis/15-advancement-strategy.md`
 
 Phase 10 validation revealed that the current `geometric_score()` in `sigfm.c`
 cannot discriminate between different fingers (FAR=45.7%). The pairwise
 angle-counting approach is fundamentally weak — random descriptor matches
 produce O(n²) angle-entries, of which some fraction agree by chance.
+
+**Windows driver confirmation:** Decompilation of `FUN_18003aaf0` (line ~38550
+in `AlgoMilan.c`) confirms Windows uses the same principle — inlier counting
+after transform estimation from matched feature triples. Our 2-point RANSAC
+is a simpler variant of the same approach.
 
 ### Required Changes
 
@@ -318,25 +324,31 @@ produce O(n²) angle-entries, of which some fraction agree by chance.
 ### RANSAC Algorithm (2-point rigid transform)
 
 ```
-for N iterations (e.g., 100):
+for N iterations (e.g., 100–200):
     pick 2 random matches (4 points: 2 in frame, 2 in enrolled)
-    estimate rotation θ and translation (tx, ty) from the 2-point correspondence
-    count inliers: matches where |T(frame_kp) - enrolled_kp| < ε (e.g., 3 px)
+    reject if points < 3 px apart (degenerate)
+    estimate rotation θ and translation (tx, ty) from the 2-point correspondence:
+        cos_θ = (dx1·dx2 + dy1·dy2) / len1²
+        sin_θ = (dx1·dy2 - dy1·dx2) / len1²
+        tx = q1.x - (cos_θ·p1.x - sin_θ·p1.y)
+        ty = q1.y - (sin_θ·p1.x + cos_θ·p1.y)
+    count inliers: matches where |T(frame_kp) - enrolled_kp| < ε (3 px)
     keep best inlier count
 score = best inlier count
 ```
 
-Expected outcome: genuine → 15–50 inliers, impostor → 0–2 inliers.
+Expected outcome: genuine → 10–50 inliers, impostor → 0–2 inliers.
 Clean separation, no overlap.
 
 ### Optional enhancements (deferred until RANSAC is validated)
 
 - Oriented BRIEF (ORB-style rotation normalization) — reduces FRR from placement rotation
 - Adaptive ε based on image quality
+- Upgrade to exhaustive triple evaluation (Windows-style) if RANSAC insufficient
 
 ### Scope estimate
 
-~150 lines of C replacing `geometric_score()`. No API changes, no serialisation
+~80 lines of C replacing `geometric_score()`. No API changes, no serialisation
 changes, no new dependencies. Rebuild + re-test with existing corpus.
 
 ### Acceptance criteria
@@ -462,3 +474,4 @@ confirmed with more data.
 | 2026-02-22 | Live sensor test passed: fprintd installed, ldconfig configured for `/usr/local/lib` priority, enroll + verify works end-to-end with Phase 8 improvements. |
 | 2026-02-22 | Full action plan review. All 17 analysis docs audited for open items. Goal refocused: AUR publish is primary, upstream MR is secondary. Open Question #1 (GnuTLS PSK-DHE) resolved. Added Phases 9 (AUR publish) and 10 (validation). Community engagement items postponed. Windows algorithm improvements deferred pending Phase 10 validation. PSK flashing requirement documented (OQ #6). |
 | 2026-02-22 | Phase 10 validation complete. 5-finger corpus (145 PGMs): FRR=13.7%, **FAR=45.7%**. Impostor scores overlap genuine scores heavily (EER≈25%). Root cause: `geometric_score()` uses pairwise angle-counting, not rigid transform verification. None of the deferred doc-13 items address FAR. Added Phase 11 (RANSAC geometric verification) as blocking prerequisite for AUR publish. Phase 9 now blocked on Phase 11. Full results: `analysis/14-sigfm-benchmark-results.md`. |
+| 2026-02-22 | Full advancement strategy analysis (`analysis/15-advancement-strategy.md`). Deep-read of Windows decompiled matching pipeline: `FUN_18003aaf0` uses exhaustive triple-based affine estimation + inlier counting — confirms RANSAC approach is correct. Windows does NOT use pairwise angle-counting. Refined Phase 11: scope reduced to ~80 lines (was ~150), added implementation details (2-point rigid transform formulas, ε=3px, min distance check), added Windows decompilation evidence, added upgrade path to exhaustive triples if needed. |
