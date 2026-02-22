@@ -24,12 +24,15 @@ Keep it up to date as work progresses.
 
 ## Goal
 
-Produce an upstream-ready libfprint MR for the Goodix `27c6:5110` (GF511) fingerprint
-sensor. "Upstream-ready" means: no OpenSSL, no pthreads, no OpenCV, pure C, following
-the exact patterns already in mainline libfprint.
+Produce a working, distributable libfprint driver for the Goodix `27c6:5110` (GF511)
+fingerprint sensor. Pure C, no OpenSSL/pthreads/OpenCV.
 
-Working tree: `/workspace/libfprint-fork`  
-Active branch: `goodixtls-on-1.94.9` (4 commits above tag `v1.94.9`)  
+**Primary goal:** Publish AUR package for Arch-based distros.  
+**Secondary goal:** Submit upstream MR to libfprint (optional, worth trying).
+
+Working tree: `libfprint-fork/`  
+Active branch: `goodixtls-on-1.94.9`  
+GitHub: `github.com/buxel/libfprint.git`  
 Upstream target: `https://gitlab.freedesktop.org/libfprint/libfprint`  
 Detailed porting plan: `analysis/09-upstream-porting-plan.md`
 
@@ -47,8 +50,11 @@ Detailed porting plan: `analysis/09-upstream-porting-plan.md`
 | 4 | Build system (`meson.build`) cleanup | ✅ Done |
 | 5 | Thermal fix (1 line) | ✅ Done |
 | 5.5 | Host fprintd integration | ✅ Done |
-| 6 | AUR + Debian packaging | ✅ Done |
-| 7 | Upstream submission | ⬜ Pending |
+| 6 | AUR + Debian packaging | ✅ Done (not yet published) |
+| 7 | Upstream submission | ⏳ Optional — deprioritised |
+| 8 | SIGFM Phase 1 improvements | ✅ Done (FRR 90% → 0%) |
+| 9 | AUR publish | ⬜ Next — primary distribution goal |
+| 10 | Validation (larger corpus) | ⬜ Pending |
 
 ---
 
@@ -199,10 +205,12 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 
 ---
 
-## Phase 7 — Upstream Submission ⬜ Pending
+## Phase 7 — Upstream Submission ⏳ Optional
 
 **Depends on:** All phases above complete and passing CI  
-**Detailed spec:** `analysis/09-upstream-porting-plan.md` §Phase 6
+**Detailed spec:** `analysis/09-upstream-porting-plan.md` §Phase 6  
+**Priority:** Secondary — AUR package (Phase 9) is the primary distribution goal.
+Upstream submission is worth trying but not blocking.
 
 ### Pre-MR checklist
 
@@ -213,7 +221,73 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 - [x] `clang-format --style=file` applied to all modified C files
 - [x] Commit history is clean (one logical commit per phase or squashed per component)
 - [x] MR description links to goodix-fp-linux-dev repo and credits original authors
-- [ ] @hadess pinged on the MR (confirmed active participant on related PR #32)
+- [ ] Ask @hadess: GnuTLS dependency acceptable? (upstream now uses OpenSSL by default)
+- [ ] CI green on freedesktop GitLab
+- [ ] Test on 3+ standalone devices (upstream requirement — only 5110 tested so far)
+- [ ] Fix `-Wno-error=incompatible-pointer-types` (pointer-signedness casts in upstream code)
+- [ ] Submit `fpi-device.c` monotonic timer fix as separate upstream bug report/MR
+
+---
+
+## Phase 8 — SIGFM Phase 1 Improvements ✅ Done
+
+**Fork commit:** `a0b2589`  
+**Parent commit:** `1086271`  
+**Full analysis:** `analysis/14-testing-and-benchmarking-strategy.md` §11
+
+Root cause analysis identified four issues in the SIGFM matching pipeline.
+All fixed, reducing FRR from 90% to 0% on a 20-frame corpus.
+
+| Change | File | Detail |
+|--------|------|--------|
+| Ratio test 0.75 → 0.90 | `sigfm.c` | Fingerprints are self-similar; strict ratio kills genuine matches |
+| Descriptors on original image | `sigfm.c` | Detect on blurred (stable), describe on original (discriminative) |
+| NMS `>=` → `>` | `sigfm.c` | Strict local maximum, no directional bias |
+| Unsharp boost 2 → 4 | `goodix5xx.c` | Generalized formula: `boost×img − (boost−1)×blur` |
+
+**Benchmark (threshold 40, 10 enroll + 10 verify):**
+
+| Configuration | Matches | FRR | Min Score | Mean Score |
+|--------------|---------|-----|-----------|------------|
+| Pre-Phase 8 | 1/10 | 90% | 0 | — |
+| Post-Phase 8 | 10/10 | 0% | 47 | 473 |
+
+**A/B testing tools built:** `tools/replay-pipeline`, `tools/sigfm-batch`,
+`tools/capture-corpus.sh`. Design doc: `analysis/14-testing-and-benchmarking-strategy.md`.
+
+---
+
+## Phase 9 — AUR Publish ⬜ Next
+
+**Primary distribution goal.**
+
+### Checklist
+
+- [x] PKGBUILD created (`packaging/aur/PKGBUILD`)
+- [x] Branch pushed to public GitHub remote
+- [ ] Update `url=` in PKGBUILD to point to GitHub repo
+- [ ] Run `makepkg --printsrcinfo > .SRCINFO`
+- [ ] Test `makepkg -si` on clean CachyOS install
+- [ ] Publish to AUR as `libfprint-goodixtls511-git`
+- [ ] Add post-install message: re-enrollment required (SIGFM v2 serialisation)
+
+---
+
+## Phase 10 — Validation ⬜ Pending
+
+Phase 8 achieved 0% FRR on a 20-frame single-session corpus. This is promising
+but insufficient to declare the driver production-quality.
+
+### Required
+
+- [ ] Capture 50+ frame corpus across varied conditions (pressure, placement, moisture)
+- [ ] Cross-session test: re-enroll, capture verify corpus on a different day
+- [ ] Re-run `sigfm-batch` on larger corpus to confirm FRR holds
+
+### Optional
+
+- [ ] Impostor test (second finger corpus) for FAR measurement
+- [ ] Test on other 51xx VID/PID variants (5117, 5120, 521d) if hardware available
 
 ---
 
@@ -226,33 +300,83 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 | Raw pixel depth | 16-bit (`guint16`), per-frame |
 | Scan width (raw) | 88 columns (24 are reference electrodes, discarded) |
 | Enrollment frames | 20 presses (`nr_enroll_stages = 20`) |
-| Current matcher | SIGFM (SIFT via OpenCV), `score_threshold = 24` |
-| Current TLS | OpenSSL TLS 1.2, PSK-DHE, 32-byte zero key |
+| Matcher | SIGFM: FAST-9 + BRIEF-256, ratio test 0.90, `score_threshold = 24` |
+| Preprocessing | Percentile stretch (P0.1→P99) + unsharp mask (boost=4) |
+| TLS | GnuTLS 1.2, PSK-DHE, 32-byte zero key, in-memory transport |
 | Firmware string | `GF_ST411SEC_APP_12117_GF3658_ST` (same on Windows) |
 | Windows algorithm | "Milan v3.02.00.15", up to 50 sub-templates, adaptive learning |
-| Working tree | `/workspace/libfprint-fork` |
+| Working tree | `libfprint-fork/` |
+| GitHub | `github.com/buxel/libfprint.git` branch `goodixtls-on-1.94.9` |
 
 ---
 
 ## Open Questions
 
-1. **GnuTLS PSK-DHE compatibility** — does the GF511 firmware accept standard GnuTLS
-   DHE-PSK negotiation, or does it require a specific DH group? (Test during Phase 2.)
-2. **ORB score calibration** — `score_threshold = 24` was tuned for SIFT descriptors.
-   BRIEF-256 with Hamming matching and the same geometric-consistency scorer may need a
-   different value. The score counts geometrically consistent angle-pairs, which scales
-   with keypoint count. If FAST-9 finds significantly more or fewer keypoints than SIFT
-   did on GF511 images, adjust `img_dev_class->score_threshold` in
-   `goodix511.c:fpi_device_goodixtls511_class_init()`. Calibrate empirically with
-   captured enrollment/verify pairs on physical hardware.
-3. **Serialisation version bump** — enrolled prints stored against the C++ SIFT
-   implementation (sigfm binary v1) are incompatible with the pure-C BRIEF implementation
-   (sigfm binary v2). Any previously-enrolled prints in `/var/lib/fprint/` must be
-   deleted and re-enrolled after deploying this driver.
-4. **Calibration blob format** — the Windows driver loads a 140KB per-sensor factory
-   calibration file. The Linux driver's calibration frame is a single averaged image.
-   Adopting PPLIB-quality preprocessing (Phase 3.5) may require understanding whether
-   a similar factory blob is accessible or can be reconstructed from the init frames.
+1. ~~**GnuTLS PSK-DHE compatibility**~~ — ✅ Resolved. The driver works end-to-end
+   (enroll + verify on CachyOS host), confirming GnuTLS PSK-DHE negotiation succeeds
+   against the GF511 firmware.
+2. **Score threshold calibration** — `score_threshold = 24` works (Phase 8 min score
+   was 47 at threshold 40), but hasn't been formally calibrated across diverse captures.
+   Deferred until Phase 10 validation with a larger corpus.
+3. **Serialisation version bump** — enrolled prints from the C++ SIFT implementation
+   (v1) are incompatible with the pure-C BRIEF implementation (v2). Users must delete
+   `/var/lib/fprint/` prints and re-enroll. Needs user-facing documentation in the AUR
+   post-install message (Phase 9).
+4. **Calibration blob format** — the Windows driver loads a 140KB per-pixel factory
+   calibration blob from sensor flash. The Linux driver uses a simple background-frame
+   subtraction. Need to investigate whether `goodix_read_otp()` can retrieve the factory
+   blob. Deferred — current preprocessing achieves 0% FRR without it.
+5. **PSK per-device vs shared** — the PSK `ba1a86...` is hardcoded. Unknown whether
+   it's per-device or shared across all 27c6:5110 units. Only one device tested.
+   See `analysis/08-session-findings-and-bug-fixes.md`.
+6. **PSK flashing requirement** — `run_5110.py` must be run once to flash the PSK to
+   the sensor. After flashing, the PSK persists in sensor flash. If a libfprint session
+   crashes mid-TLS, the device stays in TLS mode and needs a plain-mode reset before
+   libfprint can re-claim it. See `analysis/08-session-findings-and-bug-fixes.md` §PSK
+   and Firmware, §Python Warm-up Requirement.
+
+---
+
+## Deferred Improvements (from doc 13 — Windows Driver Analysis)
+
+Phase 8 achieved 0% FRR. The following improvements from `analysis/13-windows-driver-algorithm-analysis.md`
+are kept in the plan until Phase 10 validation confirms the current implementation is
+sufficient with a larger, cross-session corpus.
+
+| # | Algorithm | Status | Notes |
+|---|-----------|--------|-------|
+| 1 | Adaptive template learning | Deferred | Most impactful remaining feature. Requires driver lifecycle plumbing. |
+| 2 | Per-pixel factory calibration | Deferred | Needs calibration blob retrieval investigation (OQ #4). |
+| 3 | Boost factor 4 → 10 | Deferred | Current boost=4 achieves 0% FRR. 10× may help after calibration is added. |
+| 4 | Quality/coverage gating | Deferred | Only `< 25 keypoints` check exists. Easy to add if needed. |
+| 5 | Hessian feature detection | Deferred | Decision gate: only if FRR > 5% after validation. Currently 0%. |
+| 6 | Sub-template sorting | Deferred | Easy but low impact given current results. |
+| — | Match retry | Deferred | Re-capture on first fail. Easy to add if needed. |
+
+---
+
+## Postponed Items
+
+Community engagement tasks from early research. Will revisit when driver quality is
+confirmed with more data.
+
+- Join Goodix Fingerprint Linux Development Discord
+- Contact @gulp about PR #32 resubmission status
+- Contact @egormanga about project status
+- Update Arch Wiki: fix stale `rootd/libfprint` link → `goodix-fp-linux-dev/libfprint`
+
+---
+
+## Known Limitations
+
+1. **System libfprint overwritten by `pacman -Syu`** — CachyOS upgrades install the
+   stock `libfprint 1.94.10` to `/usr/lib/`, overwriting the library. Current workaround:
+   our `.so` is in `/usr/local/lib/` with ldconfig priority (`/etc/ld.so.conf.d/local.conf`).
+   Resolved permanently by AUR package (Phase 9) or upstream merge (Phase 7).
+2. **`-Wno-error=incompatible-pointer-types`** — required due to pointer-signedness
+   warnings in upstream libfprint code (not in our code). Not a functional issue.
+3. **Single device tested** — only one Huawei MateBook 14 AMD 2020 (27c6:5110).
+   VID/PID table includes 5117, 5120, 521d but none are verified.
 
 ---
 
@@ -261,7 +385,8 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 | Date | Change |
 |------|--------|
 | 2026-02-19 | Initial plan created. Phase 1 complete (NBIS not viable). Phase 3.5 added from Windows RE findings (`analysis/11`). |
-| 2026-02-19 | Rebased fork from 1.94.5 (grafted) to clean 1.94.9 via transplant approach. New branch `goodixtls-on-1.94.9`. Commits: `16ea092` (transplant), `8c403f9` (monotonic time fix), `705b146` (thermal fix). Build confirmed: 109/109 targets, warnings only. Phase 5 complete. || 2026-02-19 | Phase 2 complete (`0d93c2a`): TLS migrated from OpenSSL+pthread to GnuTLS in-memory transport. No sockets, no threads. `ldd`: `libgnutls.so.30` only. |
+| 2026-02-19 | Rebased fork from 1.94.5 (grafted) to clean 1.94.9 via transplant approach. New branch `goodixtls-on-1.94.9`. Commits: `16ea092` (transplant), `8c403f9` (monotonic time fix), `705b146` (thermal fix). Build confirmed: 109/109 targets, warnings only. Phase 5 complete. |
+| 2026-02-19 | Phase 2 complete (`0d93c2a`): TLS migrated from OpenSSL+pthread to GnuTLS in-memory transport. No sockets, no threads. `ldd`: `libgnutls.so.30` only. |
 | 2026-02-19 | Phase 3 complete (`1f27f60`): sigfm.cpp (OpenCV SIFT) replaced with sigfm.c (pure-C FAST-9 + BRIEF-256). opencv4/doctest deps removed. 107/107 targets. Phase 4 simultaneously complete (all build system items resolved). Score threshold calibration note added to Open Questions. |
 | 2026-02-19 | Phase 3.5 complete (`f45853f`): goodix5xx.c scan pipeline now uses percentile histogram stretch (P0.1→P99) + 3×3 Gaussian unsharp mask. Calibration subtraction was already in place. Quality gate deferred to hardware testing. |
 | 2026-02-19 | clang-format pass complete (`9a9f7df`): `.clang-format` added (GNU-based, 2-space, 90-col). All 12 goodixtls driver + sigfm files formatted in-place. Build clean: 68/68 targets. Phase 6 pre-MR checklist: clang-format item now complete. |
@@ -272,3 +397,7 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 | 2026-02-19 | Two additional commits: `9399dce` (meson: libudev fallback — Phase 6), `e369029` (rename bz3_threshold→score_threshold across all drivers). `834f5f9` (autosuspend.hwdb regeneration) squashed into `9992fc1`. Final 6 commits above v1.94.9. |
 | 2026-02-19 | Host fprintd integration complete: `install.sh` deployed to CachyOS host, finger enrolled via KDE fingerprint settings, used to unlock screen. End-to-end pipeline confirmed on host with fprintd 1.94.5 + our libfprint `.so`. Note: `pacman -Syu` upgrades to `libfprint 1.94.10` overwrite our `.so`; re-run `install.sh` after each upgrade until MR is merged. |
 | 2026-02-19 | Phase 6 complete: AUR PKGBUILD (`packaging/aur/PKGBUILD`) and Debian skeleton (`packaging/debian/debian/`) created. meson.build patched with `dependency('udev', 'libudev')` fallback at 3 sites (commit `7f6c089`); no debian/patches needed. |
+| 2026-02-21 | A/B testing infrastructure built: raw frame dump in driver (`FP_SAVE_RAW`), `tools/replay-pipeline`, `tools/sigfm-batch`, `tools/capture-corpus.sh`. 20-frame corpus captured. Design doc: `analysis/14-testing-and-benchmarking-strategy.md`. |
+| 2026-02-22 | Phase 8 complete: SIGFM Phase 1 improvements. Three fixes in `sigfm.c` (ratio test, descriptor source, NMS) + unsharp boost 2→4 in `goodix5xx.c`. FRR: 90% → 0%. Fork commit `a0b2589`, parent commit `1086271`. |
+| 2026-02-22 | Live sensor test passed: fprintd installed, ldconfig configured for `/usr/local/lib` priority, enroll + verify works end-to-end with Phase 8 improvements. |
+| 2026-02-22 | Full action plan review. All 17 analysis docs audited for open items. Goal refocused: AUR publish is primary, upstream MR is secondary. Open Question #1 (GnuTLS PSK-DHE) resolved. Added Phases 9 (AUR publish) and 10 (validation). Community engagement items postponed. Windows algorithm improvements deferred pending Phase 10 validation. PSK flashing requirement documented (OQ #6). |
