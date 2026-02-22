@@ -166,22 +166,50 @@ corrected = (raw × kr[level]) / 2048 + b[level]
 ```
 where `level` is selected based on raw ADC value (256 or 2048 thresholds).
 
+### Current Linux calibration vs. this algorithm
+
+The Linux driver does **not** retrieve factory calibration data. No function named
+`goodix_request_calibration()` exists. What the driver calls "calibration" is a
+**runtime air-scan** — a single background frame captured with no finger present at the
+start of each scan cycle, subtracted pixel-wise via `linear_subtract_inplace()`. This
+removes DC offset (dark current, ambient light) but does **not** correct per-pixel gain
+(sensitivity) variation.
+
+The only factory data the driver reads is OTP (One-Time Programmable, cmd `0xa6`) — a
+~64-byte blob used to initialize 4 sensor registers (`0x0220`, `0x0236`, `0x0238`,
+`0x023a`) during activation, then discarded. This is not the ~140 KB per-pixel
+calibration blob described above.
+
+The `calibration.bin` saved by `FP_SAVE_RAW` is the runtime air-scan frame
+(88 × 80 × 2 = 14,080 bytes), not factory calibration.
+
+| Aspect | Linux (current) | Windows (PPLIB) |
+|--------|-----------------|------------------|
+| Data source | Runtime air-scan (1 frame, no finger) | ~140 KB factory blob + 26-frame calibration stack |
+| Correction | Uniform subtraction (`finger − background`) | Per-pixel piecewise linear: `(raw × kr) / 2048 + b` |
+| What it fixes | DC offset | Both gain **and** offset variation across the die |
+| Persistence | Recaptured every scan cycle | Factory-burned, persisted on disk |
+
 ### Linux implementation plan
 
-**Difficulty: Medium** — The calibration data is already retrieved from the sensor; the
-driver needs to apply it rather than discard it.
+**Difficulty: Medium-Hard** — The factory calibration blob retrieval command is not yet
+known.
 
-1. The Linux driver already calls `goodix_request_calibration()` during init, which
-   retrieves the factory calibration blob from sensor flash. Currently this blob is
-   used only for a CRC health check.
-2. Parse the calibration blob to extract per-pixel `kr` and `b` arrays
+1. **Discover how to retrieve the factory calibration blob.** Options:
+   - USB-capture a Windows enrollment session to find the vendor-specific command
+   - Attempt to generate calibration data ourselves by capturing frames at two known
+     ADC drive levels (the OTP registers at `0x0220`/`0x0236` likely control
+     gain/exposure) and computing per-pixel kr/b from the response
+2. Parse the blob to extract per-pixel `kr` and `b` arrays
 3. In the preprocessing path, before histogram equalization:
    ```c
    for each pixel (r, c):
        level = raw[r][c] < 1152 ? 0 : 1;  // two-point piecewise
        corrected = (raw[r][c] * kr[level][r*cols+c]) >> 11 + b[level][r*cols+c];
    ```
-4. Continue with existing percentile stretch + unsharp mask
+4. Persist calibration to disk, keyed by device serial
+5. Keep the existing air-scan subtraction as a secondary step (handles session-specific
+   thermal drift)
 
 **Impact: High.** Per-pixel calibration removes fixed-pattern noise from the sensor die,
 improving ridge/valley contrast consistency across the entire image. This is particularly

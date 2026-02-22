@@ -346,7 +346,7 @@ sufficient with a larger, cross-session corpus.
 | # | Algorithm | Status | Notes |
 |---|-----------|--------|-------|
 | 1 | Adaptive template learning | Deferred | Most impactful remaining feature. Requires driver lifecycle plumbing. |
-| 2 | Per-pixel factory calibration | Deferred | Needs calibration blob retrieval investigation (OQ #4). |
+| 2 | Per-pixel factory calibration | Deferred (optional) | **Blocking unknown:** no command to retrieve factory kr/b blob (~140 KB) is known. Current runtime air-scan subtraction corrects offset only, not per-pixel gain. Options: USB-capture Windows session to find the command, or generate calibration from controlled ADC captures. See doc 13 §4 for corrected analysis. |
 | 3 | Boost factor 4 → 10 | Deferred | Current boost=4 achieves 0% FRR. 10× may help after calibration is added. |
 | 4 | Quality/coverage gating | Deferred | Only `< 25 keypoints` check exists. Easy to add if needed. |
 | 5 | Hessian feature detection | Deferred | Decision gate: only if FRR > 5% after validation. Currently 0%. |
