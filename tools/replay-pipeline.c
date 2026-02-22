@@ -33,7 +33,7 @@
 #define DEFAULT_SCAN_WIDTH  88
 #define DEFAULT_WIDTH       64
 #define DEFAULT_HEIGHT      80
-#define DEFAULT_BOOST       2
+#define DEFAULT_BOOST       4
 
 /* Clamp macro (matching GLib CLAMP) */
 #define CLAMP(x, lo, hi) ((x) < (lo) ? (lo) : ((x) > (hi) ? (hi) : (x)))
