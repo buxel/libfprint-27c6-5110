@@ -572,6 +572,10 @@ FAR=0.00% cross-corpus. Threshold=7, multi-scale, ratio=0.80, RANSAC 200.
 - Hessian keypoint filtering (B4) — destroys FRR (+6 to +70pp)
 - Exhaustive triples (D2) — identical to RANSAC (solution space too small)
 - Template study v1/v2 — v1 FAR catastrophe, v2 FRR regression at new config
+- A6 (12-bit working space) — **REJECTED**: benchmarked, no improvement
+  (intra-session FRR 29.8% → 29.8%, cross-session FRR 28.6% → 29.3%).
+  FAST-9/BRIEF-256 are binary/threshold operators; finer input precision
+  doesn't translate to better feature detection.
 - Boost >4 — FAR catastrophe without factory calibration
 - Oriented BRIEF — removed orientation discriminator, hurt FAR
 - RANSAC constraints (rotation, translation) — hurt genuine more than impostor
@@ -580,7 +584,6 @@ FAR=0.00% cross-corpus. Threshold=7, multi-scale, ratio=0.80, RANSAC 200.
 
 | # | Idea | Effort | Expected Impact | Risk | Source |
 |---|------|--------|-----------------|------|--------|
-| **A6** | **12-bit working space** — process in 12-bit, quantize to 8 only for FAST/BRIEF. Preserves dynamic range during unsharp mask; may produce better descriptors. | ~30 min | Low-Med | Low — purely additive, no regression risk | doc 15 §A6 |
 | **E6** | **Progressive enrollment quality** — strict quality threshold for first 10 frames (ensure high-quality core), lenient for last 10 (ensure placement diversity). | ~1 hr | Low | Low — only affects enrollment, not matcher | doc 15 §E6 |
 | **E3** | **Score-based sub-template sorting** — during enrollment, rank by inter-template RANSAC score (how well each frame matches the others). Keep well-connected frames, discard outliers. | ~1 hr | Low-Med | Low | doc 15 §E3 |
 | **D10** | **Multi-criteria accept** — combine inlier count with inlier spatial spread or descriptor quality. Might distinguish the 1 stubborn false accept (right-ring/capture_0007, score=7 exactly at threshold). | ~2 hr | Low | Med — could hurt genuine borderline matches too | doc 15 §D10 |
@@ -596,8 +599,8 @@ FAR=0.00% cross-corpus. Threshold=7, multi-scale, ratio=0.80, RANSAC 200.
 ### Verdict
 
 The 4 "worth trying" ideas are all low-effort (\< 2 hrs each) with limited
-downside. **A6 (12-bit working space)** and **E3 (score-based enrollment
-sorting)** are the most likely to yield measurable improvement. The 8 failing
+downside. **E3 (score-based enrollment
+sorting)** is the most likely to yield measurable improvement. The 8 failing
 captures (27.6% FRR) all have sufficient keypoints (112-128) but score 0-6 —
 the fundamental constraint is placement variation on a 3.2×4.0 mm sensor area.
 Any improvement at this point is marginal; the algorithmic ceiling is close.
@@ -671,3 +674,4 @@ Activities deferred until improvement/validation work is complete.
 | 2026-02-23 | **Phase 12 closed — algorithmic ceiling reached.** Exhaustive exploration: B4 Hessian (rejected, destroys FRR), D2 exhaustive triples (neutral — identical to RANSAC, disabled), RANSAC iteration sweep (no effect), study v2 re-bench (worse at new config), E4/E2 enrollment sweep (no effect). Final operating point: **FRR=27.6% per-attempt / 0.16% effective (5 retries), FAR=0.00%** cross-corpus. Score gap clean: impostor max=6, genuine MATCH min=8. Remaining 8/29 failures are placement mismatches on 64×80 sensor — not recoverable by any algorithm. Phase 9 (AUR publish) is now the clear next step. Full analysis: `analysis/15-advancement-strategy.md` §7–§14. |
 | 2026-02-23 | **Action plan consistency review.** Fixed Phase 12c status: was marked ✅ Done but code was rejected and removed (FAR 43× regression). Updated to ❌ Rejected with cross-references to docs 14 §6.4, 15 §7.2. Fixed Phase 10 verdict (was present-tense "Phase 11 required" → past-tense reflecting completion). Marked Phase 10 re-test item complete. Updated Phase 11 score_threshold note (6 → 7 in Phase 12f). Added 12d benchmark evidence. Added cross-person impostor test to validation. Added Next Steps section with prioritised actionable tasks. |
 | 2026-02-23 | **AUR publish and upstream postponed.** Phase 9 and Phase 7 moved to Postponed. Next Steps refocused on validation improvements and remaining algorithmic opportunities. Improvement assessment added. |
+| 2026-02-23 | **A6 (12-bit working space) rejected.** Implemented in driver and `replay-pipeline --12bit`. Benchmarked: intra-session FRR 29.8% → 29.8% (identical), cross-session FRR 28.6% → 29.3% (slightly worse), FAR 0.00% → 0.00%. FAST-9/BRIEF-256 are binary/threshold operators that don't benefit from finer input precision. Driver reverted; benchmark tooling kept for reference. |

@@ -145,6 +145,101 @@ unsharp_mask_inplace(uint8_t *img, int w, int h, int boost)
     free(blurred);
 }
 
+/* ── A6: 12-bit working space ─────────────────────────────────────
+ * Percentile stretch to 16-bit intermediate, unsharp mask in 16-bit,
+ * then final quantization to 8-bit.  This preserves fine gradations
+ * through the sharpening step instead of amplifying 8-bit quantization
+ * artefacts.
+ * ---------------------------------------------------------------- */
+
+static void
+squash_frame_percentile_wide(uint16_t *frame, uint16_t *wide,
+                             uint16_t frame_size)
+{
+    uint32_t hist[256] = { 0 };
+    for (int i = 0; i < frame_size; i++)
+        hist[frame[i] >> 8]++;
+
+    /* P0.1 (black level) */
+    uint32_t target_lo = (uint32_t)(frame_size * 1u + 999u) / 1000u;
+    uint32_t count = 0;
+    int bin_lo = 0;
+    for (int b = 0; b < 256; b++) {
+        count += hist[b];
+        if (count >= target_lo) { bin_lo = b; break; }
+    }
+
+    /* P99 (white level) */
+    uint32_t target_hi = (uint32_t)(frame_size * 99u) / 100u;
+    count = 0;
+    int bin_hi = 255;
+    for (int b = 255; b >= 0; b--) {
+        count += hist[b];
+        if ((uint32_t)frame_size - count <= target_hi) { bin_hi = b; break; }
+    }
+
+    if (bin_hi <= bin_lo) {
+        /* Degenerate — linear stretch to 16-bit */
+        uint16_t mn = 0xffff, mx = 0;
+        for (int i = 0; i < frame_size; i++) {
+            if (frame[i] < mn) mn = frame[i];
+            if (frame[i] > mx) mx = frame[i];
+        }
+        for (int i = 0; i < frame_size; i++) {
+            if (mx == mn)
+                wide[i] = 0;
+            else
+                wide[i] = (uint16_t)(((uint32_t)(frame[i] - mn) * 65535u) / (mx - mn));
+        }
+        return;
+    }
+
+    uint16_t plo = (uint16_t)(bin_lo << 8);
+    uint16_t phi = (uint16_t)(bin_hi << 8);
+    int range = (int)phi - (int)plo;
+
+    for (int i = 0; i < frame_size; i++) {
+        int v = (int)frame[i] - (int)plo;
+        if (v <= 0)          wide[i] = 0;
+        else if (v >= range)  wide[i] = 65535;
+        else                 wide[i] = (uint16_t)((uint32_t)v * 65535u / (uint32_t)range);
+    }
+}
+
+/* Unsharp mask in 16-bit, output 8-bit */
+static void
+unsharp_mask_wide_to_8(uint16_t *wide, uint8_t *out, int w, int h, int boost)
+{
+    uint16_t *blurred = malloc((size_t)w * h * sizeof(uint16_t));
+    if (!blurred) { perror("malloc"); return; }
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            int sum = 0, weight = 0;
+            for (int dy = -1; dy <= 1; dy++) {
+                int ny = y + dy;
+                if (ny < 0 || ny >= h) continue;
+                for (int dx = -1; dx <= 1; dx++) {
+                    int nx = x + dx;
+                    if (nx < 0 || nx >= w) continue;
+                    int wpx = (dx == 0 ? 2 : 1) * (dy == 0 ? 2 : 1);
+                    sum += wpx * (int)wide[ny * w + nx];
+                    weight += wpx;
+                }
+            }
+            blurred[y * w + x] = (uint16_t)(sum / weight);
+        }
+    }
+
+    for (int i = 0; i < w * h; i++) {
+        int v = boost * (int)wide[i] - (boost - 1) * (int)blurred[i];
+        v = CLAMP(v, 0, 65535);
+        out[i] = (uint8_t)(v >> 8);  /* 16-bit → 8-bit */
+    }
+
+    free(blurred);
+}
+
 /* ================================================================== */
 /* File I/O                                                            */
 /* ================================================================== */
@@ -197,6 +292,7 @@ usage(const char *argv0)
         "          [--width=N]       output crop width (default: %d)\n"
         "          [--no-crop]       skip cropping step\n"
         "          [--no-unsharp]    skip unsharp mask step\n"
+        "          [--12bit]         A6: 12-bit working space (sharpen in 16-bit)\n"
         "          [--batch DIR]     process all raw_*.bin in DIR\n"
         "\n"
         "Replays the goodix5xx preprocessing pipeline offline.\n"
@@ -215,7 +311,7 @@ usage(const char *argv0)
 static int
 process_frame(const char *raw_path, const char *cal_path, const char *out_path,
               int scan_width, int height, int out_width, int boost,
-              int do_crop, int do_unsharp)
+              int do_crop, int do_unsharp, int wide_mode)
 {
     int frame_size = scan_width * height;
 
@@ -235,15 +331,24 @@ process_frame(const char *raw_path, const char *cal_path, const char *out_path,
         }
     }
 
-    /* Step 2: percentile stretch → 8-bit */
     uint8_t *squashed = malloc((size_t)frame_size);
     if (!squashed) { perror("malloc"); free(frame); return -1; }
-    squash_frame_percentile(frame, squashed, (uint16_t)frame_size);
-    free(frame);
 
-    /* Step 3: unsharp mask */
-    if (do_unsharp && boost > 0)
-        unsharp_mask_inplace(squashed, scan_width, height, boost);
+    if (wide_mode && do_unsharp && boost > 0) {
+        /* A6: percentile stretch → 16-bit, unsharp in 16-bit, quantize → 8-bit */
+        uint16_t *wide = malloc((size_t)frame_size * sizeof(uint16_t));
+        if (!wide) { perror("malloc"); free(squashed); free(frame); return -1; }
+        squash_frame_percentile_wide(frame, wide, (uint16_t)frame_size);
+        free(frame);
+        unsharp_mask_wide_to_8(wide, squashed, scan_width, height, boost);
+        free(wide);
+    } else {
+        /* Original 8-bit path */
+        squash_frame_percentile(frame, squashed, (uint16_t)frame_size);
+        free(frame);
+        if (do_unsharp && boost > 0)
+            unsharp_mask_inplace(squashed, scan_width, height, boost);
+    }
 
     /* Step 4: crop */
     int final_w = do_crop ? out_width : scan_width;
@@ -271,7 +376,8 @@ process_frame(const char *raw_path, const char *cal_path, const char *out_path,
     free(output);
 
     if (ret == 0)
-        printf("  %s → %s (%d×%d, boost=%d)\n", raw_path, out_path, final_w, height, boost);
+        printf("  %s → %s (%d×%d, boost=%d%s)\n", raw_path, out_path,
+               final_w, height, boost, wide_mode ? ", 12bit" : "");
 
     return ret;
 }
@@ -285,7 +391,7 @@ process_frame(const char *raw_path, const char *cal_path, const char *out_path,
 static int
 batch_process(const char *dir, const char *cal_path,
               int scan_width, int height, int out_width, int boost,
-              int do_crop, int do_unsharp)
+              int do_crop, int do_unsharp, int wide_mode)
 {
     DIR *d = opendir(dir);
     if (!d) { perror(dir); return -1; }
@@ -319,7 +425,7 @@ batch_process(const char *dir, const char *cal_path,
 
         if (process_frame(raw_path, cal_path, out_path,
                           scan_width, height, out_width, boost,
-                          do_crop, do_unsharp) == 0)
+                          do_crop, do_unsharp, wide_mode) == 0)
             count++;
         else
             errors++;
@@ -347,6 +453,7 @@ main(int argc, char *argv[])
     int boost = DEFAULT_BOOST;
     int do_crop = 1;
     int do_unsharp = 1;
+    int wide_mode = 0;  /* A6: 12-bit working space */
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--raw") == 0 && i + 1 < argc)
@@ -369,6 +476,8 @@ main(int argc, char *argv[])
             do_crop = 0;
         else if (strcmp(argv[i], "--no-unsharp") == 0)
             do_unsharp = 0;
+        else if (strcmp(argv[i], "--12bit") == 0)
+            wide_mode = 1;
         else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
             usage(argv[0]);
         else {
@@ -377,13 +486,14 @@ main(int argc, char *argv[])
         }
     }
 
-    printf("replay-pipeline: scan=%d×%d → crop=%d×%d  boost=%d\n",
-           scan_width, height, out_width, height, boost);
+    printf("replay-pipeline: scan=%d×%d → crop=%d×%d  boost=%d%s\n",
+           scan_width, height, out_width, height, boost,
+           wide_mode ? "  [12-bit working space]" : "");
 
     if (batch_dir)
         return batch_process(batch_dir, cal_path,
                              scan_width, height, out_width, boost,
-                             do_crop, do_unsharp) == 0 ? 0 : 1;
+                             do_crop, do_unsharp, wide_mode) == 0 ? 0 : 1;
 
     if (!raw_path || !out_path) {
         fprintf(stderr, "Must specify --raw and -o (or --batch)\n");
@@ -392,5 +502,5 @@ main(int argc, char *argv[])
 
     return process_frame(raw_path, cal_path, out_path,
                          scan_width, height, out_width, boost,
-                         do_crop, do_unsharp) == 0 ? 0 : 1;
+                         do_crop, do_unsharp, wide_mode) == 0 ? 0 : 1;
 }
