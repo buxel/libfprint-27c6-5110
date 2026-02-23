@@ -10,8 +10,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-AUR_DIR="$(cd "$SCRIPT_DIR/../packaging/aur" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+AUR_DIR="$REPO_ROOT/packaging/aur"
 LIBFPRINT_REPO="$REPO_ROOT/libfprint-fork"
 
 # ---------------------------------------------------------------------------
