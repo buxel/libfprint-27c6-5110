@@ -165,6 +165,7 @@ and deferred improvements.
 
 | Document | Contents |
 |---|---|
+| [BENCHMARKS.md](BENCHMARKS.md) | Benchmark summary: all phases, rejected experiments, algorithmic ceiling |
 | [tools/README.md](tools/README.md) | Tool usage: capture, replay, benchmark, install |
 | [packaging/README.md](packaging/README.md) | AUR PKGBUILD usage |
 | [ACTION_PLAN.md](ACTION_PLAN.md) | Phase status, pre-MR checklist, changelog |
