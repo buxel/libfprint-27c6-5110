@@ -1,0 +1,76 @@
+══════════════════════════════════════════════════════════════
+  Improvement Sweep Benchmark
+══════════════════════════════════════════════════════════════
+  S1 (enroll):  corpus/5finger
+  S2 (verify):  corpus/5finger-s2
+  Fingers:      right-index right-little right-middle right-ring right-thumb
+  Threshold:    6
+──────────────────────────────────────────────────────────────
+
+── baseline ──────────────────────────────────────────
+  right-index     FRR= 24.1%  (7/29)
+  right-little    FRR= 20.7%  (6/29)
+  right-middle    FRR= 37.9%  (11/29)
+  right-ring      FRR= 17.2%  (5/29)
+  right-thumb     FRR= 20.0%  (6/30)
+  AGGREGATE       FRR= 24.0%   FAR= 2.91%  (17 fa / 584)
+
+── quality-enroll ──────────────────────────────────────────
+  right-index     FRR= 24.1%  (7/29)
+  right-little    FRR= 20.7%  (6/29)
+  right-middle    FRR= 37.9%  (11/29)
+  right-ring      FRR= 17.2%  (5/29)
+  right-thumb     FRR= 20.0%  (6/30)
+  AGGREGATE       FRR= 24.0%   FAR= 2.91%  (17 fa / 584)
+
+── diversity-15 ──────────────────────────────────────────
+  right-index     FRR= 34.5%  (10/29)
+  right-little    FRR= 24.1%  (7/29)
+  right-middle    FRR= 55.2%  (16/29)
+  right-ring      FRR= 41.4%  (12/29)
+  right-thumb     FRR= 23.3%  (7/30)
+  AGGREGATE       FRR= 35.6%   FAR= 1.54%  (9 fa / 584)
+
+── sort-15 ──────────────────────────────────────────
+  right-index     FRR= 30.0%  (9/30)
+  right-little    FRR= 43.3%  (13/30)
+  right-middle    FRR= 43.3%  (13/30)
+  right-ring      FRR= 36.7%  (11/30)
+  right-thumb     FRR= 38.7%  (12/31)
+  AGGREGATE       FRR= 38.4%   FAR= 1.66%  (10 fa / 604)
+
+── quality+diversity-15 ──────────────────────────────────────────
+  right-index     FRR= 34.5%  (10/29)
+  right-little    FRR= 20.7%  (6/29)
+  right-middle    FRR= 55.2%  (16/29)
+  right-ring      FRR= 20.7%  (6/29)
+  right-thumb     FRR= 20.0%  (6/30)
+  AGGREGATE       FRR= 30.1%   FAR= 1.71%  (10 fa / 584)
+
+── quality+sort-15 ──────────────────────────────────────────
+  right-index     FRR= 30.0%  (9/30)
+  right-little    FRR= 43.3%  (13/30)
+  right-middle    FRR= 43.3%  (13/30)
+  right-ring      FRR= 36.7%  (11/30)
+  right-thumb     FRR= 25.8%  (8/31)
+  AGGREGATE       FRR= 35.8%   FAR= 1.82%  (11 fa / 604)
+
+── diversity-10 ──────────────────────────────────────────
+  right-index     FRR= 41.4%  (12/29)
+  right-little    FRR= 41.4%  (12/29)
+  right-middle    FRR= 69.0%  (20/29)
+  right-ring      FRR= 55.2%  (16/29)
+  right-thumb     FRR= 30.0%  (9/30)
+  AGGREGATE       FRR= 47.3%   FAR= 0.86%  (5 fa / 584)
+
+── quality+diversity-10 ──────────────────────────────────────────
+  right-index     FRR= 41.4%  (12/29)
+  right-little    FRR= 37.9%  (11/29)
+  right-middle    FRR= 69.0%  (20/29)
+  right-ring      FRR= 48.3%  (14/29)
+  right-thumb     FRR= 30.0%  (9/30)
+  AGGREGATE       FRR= 45.2%   FAR= 1.37%  (8 fa / 584)
+
+══════════════════════════════════════════════════════════════
+  Sweep complete
+══════════════════════════════════════════════════════════════

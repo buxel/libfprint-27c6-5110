@@ -1,0 +1,10 @@
+== E4/E2 Sweep (score_threshold=7, multi-scale+ratio=0.80) ==
+  (30 enrollment frames per finger)
+
+  baseline (30→all, default)        FRR=  28.6%  FAR=  0.17%  (1 fa / 588)
+  baseline (30→20, max-sub=20)      FRR=  28.6%  FAR=  0.17%  (1 fa / 588)
+  quality-enroll (30→20)            FRR=  28.6%  FAR=  0.17%  (1 fa / 588)
+  diversity-prune (30→20)           FRR=  34.0%  FAR=  0.17%  (1 fa / 588)
+  quality+diversity (30→20)         FRR=  34.0%  FAR=  0.17%  (1 fa / 588)
+  all 30 subtemplates                 FRR=  28.6%  FAR=  0.17%  (1 fa / 588)
+  quality (30→25)                   FRR=  28.6%  FAR=  0.17%  (1 fa / 588)

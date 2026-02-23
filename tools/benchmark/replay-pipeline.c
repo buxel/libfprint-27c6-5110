@@ -222,7 +222,9 @@ process_frame(const char *raw_path, const char *cal_path, const char *out_path,
     uint16_t *frame = read_raw(raw_path, frame_size);
     if (!frame) return -1;
 
-    /* Step 1: calibration subtract */
+    /* Step 1: calibration subtract (only if explicitly requested).
+     * NOTE: raw_NNNN.bin files from FP_SAVE_RAW are already post-cal —
+     * pass --cal only for truly uncalibrated captures. */
     if (cal_path) {
         uint16_t *cal = read_raw(cal_path, frame_size);
         if (!cal) {
@@ -248,7 +250,11 @@ process_frame(const char *raw_path, const char *cal_path, const char *out_path,
     uint8_t *output;
 
     if (do_crop && out_width < scan_width) {
-        int offset = (scan_width - out_width) / 2;
+        /* Left-aligned crop: matches driver's goodix511 crop_frame()
+         * which copies columns 0..out_width from the scan_width image.
+         * Previous center crop (offset = (scan_width - out_width) / 2)
+         * produced different pixel data than the driver. */
+        int offset = 0;
         output = malloc((size_t)out_width * height);
         if (!output) { perror("malloc"); free(squashed); return -1; }
         for (int y = 0; y < height; y++)
@@ -284,16 +290,13 @@ batch_process(const char *dir, const char *cal_path,
     DIR *d = opendir(dir);
     if (!d) { perror(dir); return -1; }
 
-    /* Auto-detect calibration.bin in the same directory */
+    /* NOTE: raw_*.bin files saved by the driver (via FP_SAVE_RAW) are
+     * already calibration-subtracted.  Do NOT auto-apply calibration.bin
+     * — that would double-subtract and destroy the image.
+     * Pass --cal explicitly only for truly uncalibrated raw captures. */
     char auto_cal[1024];
     if (!cal_path) {
-        snprintf(auto_cal, sizeof(auto_cal), "%s/calibration.bin", dir);
-        FILE *f = fopen(auto_cal, "rb");
-        if (f) {
-            fclose(f);
-            cal_path = auto_cal;
-            printf("  Auto-detected calibration: %s\n", cal_path);
-        }
+        (void)auto_cal;  /* unused unless --cal is explicit */
     }
 
     int count = 0, errors = 0;

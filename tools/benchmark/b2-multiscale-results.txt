@@ -1,0 +1,6 @@
+  right-index    FRR=  24.1%  (7/29)  fa=6/118
+  right-little   FRR=  20.7%  (6/29)  fa=3/118
+  right-middle   FRR=  31.0%  (9/29)  fa=2/118
+  right-ring     FRR=  20.0%  (6/30)  fa=6/117
+  right-thumb    FRR=  16.7%  (5/30)  fa=0/117
+  AGGREGATE     FRR=22.4%  FAR=2.89%  (17 fa / 588)

@@ -1,0 +1,6 @@
+== Thresh sweep with multi-scale ==
+thresh=8  FRR=29.3%  FAR=0.17%  (1 fa / 588)
+thresh=10  FRR=33.3%  FAR=0.00%  (0 fa / 588)
+thresh=7  FRR=27.9%  FAR=0.34%  (2 fa / 588)
+thresh=6  FRR=22.4%  FAR=2.89%  (17 fa / 588)
+thresh=9  FRR=30.6%  FAR=0.00%  (0 fa / 588)

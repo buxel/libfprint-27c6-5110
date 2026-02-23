@@ -1,0 +1,6 @@
+== Single-scale thresh sweep ==
+thresh=8  FRR=29.5%  FAR=0.17%  (1 fa / 584)
+thresh=10  FRR=33.6%  FAR=0.00%  (0 fa / 584)
+thresh=7  FRR=27.4%  FAR=0.51%  (3 fa / 584)
+thresh=9  FRR=30.1%  FAR=0.00%  (0 fa / 584)
+thresh=6  FRR=24.0%  FAR=2.91%  (17 fa / 584)
