@@ -1,7 +1,7 @@
 # 16 — Firmware & PSK Compatibility: Making Flashing Redundant
 
 **Date:** 2026-02-23 (updated 2026-02-24)  
-**Status:** Partial success — firmware/PSK checks relaxed, but TLS key reset blocked on fw 12118
+**Status:** Closed — firmware/PSK checks relaxed; in-driver reprovisioning abandoned (see §11–§13)
 
 ---
 
@@ -108,6 +108,277 @@ The `ba1a86...` value was the PSK written by `run_5110.py` during the
 initial firmware flash. Windows replaced it with `beab23...`. Both are
 valid — the specific value doesn't matter as long as the TLS session PSK
 (all-zeros) is unchanged.
+
+### 5a. Windows Driver Reverse Engineering — PSK & TLS Internals
+
+A detailed decompilation analysis of the Windows user-mode WBDI engine
+adapter DLLs (`EngineAdapter.c` / `AlgoMilan.c`) reveals the following
+PSK provisioning architecture. Note: the **kernel driver** (`GoodixFingerPrint.sys`)
+actually sends USB commands to the sensor; the user-mode DLLs handle
+the cipher/HMAC math and hand the results to the kernel via IOCTLs.
+
+#### Registry Configuration Flags
+
+These are read from `HKLM\Software\Goodix\FP\*` during `init_config()`:
+
+| Flag | Global | File | Line | Purpose |
+|------|--------|------|------|---------|
+| `FirmwareUpdateSwitch` | `DAT_1800e42f4` (EA) / `DAT_1800ab994` (AM) | Both | EA:8182–8188 / AM:2562–2568 | Controls whether firmware flashing is enabled (1=yes) |
+| `PSKSimulationSwitch` | `DAT_1800e42f5` (EA) / `DAT_1800ab995` (AM) | Both | EA:8193–8199 / AM:2573–2579 | When set, uses a fixed/debug PSK instead of generating random |
+| `PSKCacheSwitch` | `DAT_1800e42f6` (EA) / `DAT_1800ab996` (AM) | Both | EA:8203–8209 / AM:2583–2589 | Controls whether PSK is cached to registry across sessions |
+
+These flags are stored as single bytes and passed to the kernel driver
+via IOCTL. They are **read-only** in the user-mode DLLs — the kernel
+driver consumes them to decide the provisioning strategy.
+
+#### `SecWhiteEncrypt` / `GoodixDataAesEncrypt` — The Whitebox Blob Generator
+
+**Function:** `FUN_180003190` (EngineAdapter.c, lines 2177–2654)  
+**Source path:** `f:\git\winfpsec\winfpsec\seclibs\sourceall\sourcecode\seccipher.c`  
+**Called as:** `SecWhiteEncrypt` / `GoodixDataAesEncrypt`
+
+This is the core cryptographic function that creates the 96-byte
+"whitebox" PSK blob written to the device via command `0xe0`. It also
+encrypts data dumps (the same function serves double duty for data-at-rest
+encryption in dump files).
+
+**Pseudocode:**
+```
+SecWhiteEncrypt(plaintext, plaintext_len, ciphertext_out, ciphertext_len_out):
+    // 1. Set up AES-256-CBC cipher (mbedtls)
+    cipher_info = lookup(AES-256-CBC)
+    cipher_setup(ctx, cipher_info)
+    
+    // 2. Set up HMAC-SHA256 context for key derivation
+    md_ctx = md_setup(SHA256)
+    hmac_key_buf = calloc(2, 0x40)  // 128 bytes for derived keys
+    
+    // 3. DERIVE THE AES KEY via HMAC
+    //    Reference table: DAT_1800d33a0 (the static whitebox table)
+    
+    // 3a. First HMAC: derive 16-byte IV
+    iv_buf = zeroes(64)
+    iv_buf[0..3] = serialize_le32(plaintext_len)  // 4 bytes of length
+    hmac_reset(md_ctx)
+    hmac_update(md_ctx, iv_buf, 4)
+    hmac_update(md_ctx, "123GOODIX", 9)          // ← HARDCODED HMAC SALT
+    hmac_finish(md_ctx, iv_buf)
+    
+    // 3b. Derive first 16 bytes → used as IV
+    iv = iv_buf[0..15]
+    // XOR last byte of first hash with low nibble of plaintext_len:
+    iv[15] = (iv[15] ^ (byte)plaintext_len) & 0x0F ^ iv[15]
+    // Copy first 16 bytes to output as header (PSK identity hash)
+    ciphertext_out[0..15] = iv
+    
+    // 3c. Second HMAC: derive 32-byte AES key
+    hmac_reset(md_ctx)
+    hmac_update(md_ctx, iv_buf, 0x40)   // full 64-byte buffer
+    hmac_update(md_ctx, prev_hash, 0x10) // the modified IV area
+    hmac_finish(md_ctx, iv_buf)          // → 32-byte key in iv_buf[0..31]
+    
+    // 4. Set AES-256-CBC key from derived bytes
+    cipher_setkey(ctx, iv_buf[0..31], 256, ENCRYPT)
+    cipher_set_iv(ctx, derived_iv, 16)
+    
+    // 5. Encrypt plaintext with PKCS#7 padding
+    cipher_update(ctx, plaintext, ciphertext_out+16)
+    cipher_finish(ctx, remaining)
+    
+    // 6. Append MAC tag
+    //    HMAC over ciphertext, appended as 32-byte trailer
+    hmac_finish(md_ctx, mac_tag)
+    ciphertext_out[16 + encrypted_len .. +32] = mac_tag
+    
+    // Total output: 16 (IV/hash) + encrypted_len + 32 (MAC) = 96 for 32-byte PSK
+    *ciphertext_len_out = 16 + encrypted_len + 0x30
+```
+
+**Key insight:** The function name `SecWhiteEncrypt` is misleading — it's
+not traditional whitebox crypto. It's HMAC-SHA256 key derivation using the
+constant `"123GOODIX"` as a salt, followed by AES-256-CBC encryption. The
+"whitebox table" at `DAT_1800d33a0` appears to be a static lookup table
+used for the HMAC context initialization.
+
+#### `SecAes256CbcPKCS7padDecrypt` — The Decryption Side
+
+**Function:** `FUN_1800022eb` (EngineAdapter.c, lines ~2100–2170)  
+**Source path:** `f:\git\winfpsec\winfpsec\seclibs\sourceall\sourcecode\seccipher.c`
+
+Standard AES-256-CBC decryption with PKCS#7 unpadding. Used by the driver
+to decrypt data it previously encrypted, and by the sensor firmware to
+decrypt the whitebox blob received via `0xe0`.
+
+#### GTLS Error Codes — The TLS Layer
+
+**Function:** `FUN_180005e80` (EngineAdapter.c, lines 3140–3200+)  
+Error code to string mapper for the Goodix TLS (GTLS) layer:
+
+| Error Code | Hex | String |
+|-----------|-----|--------|
+| `0xff8fffff` | -0x700001 | `[GTLS] Wrong role (neither server or client)` |
+| `0xff8ffffc` | -0x700004 | `[GTLS] Handshaking is not over, in progressing` |
+| `0xff8ffffd` | -0x700003 | `[GTLS] HMAC Identity check error` |
+| `0xff8ffffe` | -0x700002 | `[GTLS] Handshake state wrong` |
+| `0xffbffbff` | -0x400401 | `[GTLS] Not error, Driver now is still in handshaking progress` |
+| `0xffbffbfd` | -0x400403 | `Verify peer's identity or certification failed` |
+| `0xffbffefa` | -0x400106 | `AES decryption HMAC check failed.` |
+| `0xffbffefe` | -0x400102 | `AES decryption failed.` |
+| `0xffbffeff` | -0x400101 | `AES encryption failed.` |
+
+The `HMAC Identity check error` (-0x700003) occurs when the TLS PSK
+identity (not the device preset PSK) doesn't match during TLS handshake.
+This is the mbedTLS PSK-DHE handshake failing at the identity verification
+step.
+
+#### `_ForTestControlUnitGeneralControl` — Test/Provisioning Entry Points
+
+**Function:** (EngineAdapter.c, lines 15640–16060)
+
+A test harness function that dispatches provisioning operations via
+DeviceIoControl to the kernel driver. Control codes include:
+
+| Control Code (char) | Line | String | Purpose |
+|---------------------|------|--------|---------|
+| `0x27` (`'`) | 16004 | `"from driver for test original psk"` | Read/test the original (factory) PSK |
+| `0x28` (`(`) | 16013 | `"from driver clear APP"` | Erase the firmware application |
+| `0x29` (`)`) | 16021 | `"from driver update APP"` | Flash new firmware application |
+| `0x20` (` `) | 15962 | `"from driver get data_dump settings"` | Read dump configuration |
+| `0x21` (`!`) | 15979 | `"from driver get log info"` | Read log configuration |
+| `0x22` (`"`) | 15988 | `"from driver get version info"` | Read version info |
+| `0x26` (`&`) | 15996 | `"from driver get WBDI test info"` | WBDI HLK test data |
+
+The `clear APP` (0x28) and `update APP` (0x29) operations correspond to
+firmware erase and firmware flash respectively. They are dispatched via
+`IOCTL_BIOMETRIC_FOR_GENERAL_CONTROL2` to the kernel driver.
+
+#### `_ForTestControlUnitTLS` — TLS Test Operations
+
+**Function:** (EngineAdapter.c, lines 17091–17400)
+
+Handles TLS-related test operations: capture image over TLS channel,
+verify templates, and communicate results back. Uses DeviceIoControl
+with the same IOCTL pattern. This function captures fingerprint images
+through the encrypted TLS channel and runs matching algorithms, all
+within the WBDI test framework.
+
+#### Data Dump Encryption with WhiteBox
+
+The `dump_data` function (EngineAdapter.c, lines ~7180–7800) encrypts
+fingerprint data dumps using `FUN_180003190` (SecWhiteEncrypt). This is
+the same whitebox encryption function used for PSK blob generation. When
+encryption fails, it logs `"[FAILED] WhiteBox encryption failed"`.
+
+This confirms that `SecWhiteEncrypt` is a general-purpose encryption
+function — used for both PSK blob creation and data-at-rest protection.
+
+#### mbedTLS Integration
+
+The EngineAdapter DLL bundles a complete mbedTLS implementation including:
+- CTR-DRBG random number generator (line 4818+)
+- HMAC-DRBG (line 4862+)
+- Entropy source (line 4837+)
+- AES cipher suite (lines 2200–2654)
+- SSL/TLS error strings including PSK identity errors (line 4569)
+
+The SSL error string `"SSL - Unknown identity received (eg, PSK identity)"`
+at line 4569 confirms TLS-PSK is the handshake mode.
+
+#### `EngineAdapterAttach` — The Attach/Init Flow
+
+**Function:** (EngineAdapter.c, lines 11540–11660)
+
+The WBDI engine adapter attach sequence:
+1. Allocate engine context (0x390 bytes)
+2. Call `FUN_180019770` → `_GetSensorInfo`: sends IOCTL `0x442008` to get
+   sensor dimensions, chip ID, sensor type
+3. Call `FUN_1800134c0`: load sensor type configuration
+4. Call `FUN_180033080`: validate sensor type
+5. Call `FUN_180017840` → `_InitAlgorithmEngine`: initialize the matching
+   algorithm (called via function pointers in `_DAT_180100d68` table)
+
+The TLS handshake and PSK provisioning happen in the **kernel driver**
+during the IOCTL calls, not in this user-mode code. The user-mode DLL
+only provides the crypto primitives and configuration flags.
+
+### 5b. Complete PSK Provisioning Flow (Reconstructed)
+
+Based on the decompiled code, the PSK provisioning flow works as follows:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    WINDOWS BOOT / DRIVER INIT               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. Kernel driver (GoodixFingerPrint.sys) loads             │
+│                                                             │
+│  2. User-mode DLL (EngineAdapter) calls init_config():      │
+│     • Reads FirmwareUpdateSwitch from registry → flag byte  │
+│     • Reads PSKSimulationSwitch from registry → flag byte   │
+│     • Reads PSKCacheSwitch from registry → flag byte        │
+│                                                             │
+│  3. If FirmwareUpdateSwitch=1:                              │
+│     a. Kernel driver sends "clear APP" (erase firmware)     │
+│     b. Kernel driver sends "update APP" (flash new fw)      │
+│     c. Device reboots with new firmware                     │
+│                                                             │
+│  4. PSK Provisioning (in kernel driver):                    │
+│     a. If PSKSimulationSwitch=1:                            │
+│        → Use fixed/debug PSK (for factory testing)          │
+│     b. If PSKSimulationSwitch=0 (production):               │
+│        → Generate random 32-byte PSK via CTR-DRBG           │
+│                                                             │
+│     c. Call SecWhiteEncrypt(random_psk, 32, blob, &len):    │
+│        i.   HMAC-SHA256(len_le32 || "123GOODIX") → IV       │
+│        ii.  XOR-tweak last IV byte with len low nibble       │
+│        iii. First 16 bytes → Identity hash (PSK Read output) │
+│        iv.  HMAC-SHA256(full_buf || IV) → 32-byte AES key   │
+│        v.   AES-256-CBC encrypt PSK → ciphertext            │
+│        vi.  HMAC-MAC over ciphertext → 32-byte tag          │
+│        vii. Output: [16B hash | ciphertext | 32B MAC] = 96B │
+│                                                             │
+│     d. Send 96-byte blob via USB command 0xe0               │
+│        (GOODIX_CMD_PRESET_PSK_WRITE)                        │
+│                                                             │
+│     e. If PSKCacheSwitch=1:                                 │
+│        → Cache PSK to registry for session resume           │
+│                                                             │
+│  5. TLS Handshake:                                          │
+│     a. Sensor firmware decrypts the whitebox blob            │
+│        (it knows the "123GOODIX" HMAC key)                  │
+│     b. Both sides now share the 32-byte random PSK          │
+│     c. mbedTLS PSK-DHE handshake using that shared PSK      │
+│     d. If identity mismatch → 0xff8ffffd HMAC Identity err  │
+│     e. If handshake succeeds → encrypted channel ready      │
+│                                                             │
+│  6. Device returns PSK identity hash via command 0xe4:      │
+│     The first 16 bytes of the whitebox output serve as      │
+│     the identity token. PSK Read returns this hash so the   │
+│     driver can verify the provisioning state.               │
+│                                                             │
+│  7. Encrypted image capture proceeds over TLS channel       │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 5c. Relationship Between PSK Generation, WhiteBox, and TLS
+
+| Component | What it is | Who generates it | Where stored |
+|-----------|-----------|------------------|-------------|
+| **Raw PSK** | 32-byte random key | Kernel driver (CTR-DRBG) | Driver memory + optionally registry (PSKCacheSwitch) |
+| **WhiteBox blob** | 96-byte encrypted container holding the PSK | `SecWhiteEncrypt()` in user-mode DLL | Sent to device via cmd `0xe0`, stored in sensor flash |
+| **PSK Identity hash** | First 16 bytes of whitebox output | `SecWhiteEncrypt()` HMAC derivation step | Readable via cmd `0xe4`, used for handshake identity check |
+| **TLS Session PSK** | The same 32-byte random key after sensor decrypts the blob | Sensor firmware extracts from blob | Used by both sides in mbedTLS PSK-DHE handshake |
+
+**Critical insight:** The raw PSK and the TLS session PSK are the **same key**.
+The whitebox blob is merely the encrypted transport envelope. Once the sensor
+firmware decrypts it (using its built-in knowledge of the "123GOODIX" HMAC
+derivation), both sides have the identical 32-byte key for TLS.
+
+This means our Linux driver's all-zeros TLS PSK only works when the sensor
+was provisioned with an all-zeros key (which is what `goodix-fp-dump` does).
+After Windows re-provisions with a random key, the all-zeros key no longer
+matches — hence the TLS handshake failure.
 
 ---
 
@@ -289,3 +560,43 @@ regardless of the TLS key issue:
 - Enrollment on sensors where Windows changed the TLS key
 - Any sensor on firmware 12118 that was provisioned by the Windows driver
 - These sensors require firmware reflash via `goodix-fp-dump` as a workaround
+
+---
+
+## 13. Final Conclusion — Why In-Driver Reprovisioning Was Abandoned
+
+Three independent blockers make it impossible to reprovision PSK from
+within the libfprint driver:
+
+1. **PSK Write (`0xe0`) only works in IAP/bootloader mode.** Tested
+   empirically: the command times out silently in APP mode on firmware
+   12118. The Windows driver disassembly confirms it never attempts a
+   write in APP mode — it switches to IAP first (§4 in doc 17).
+
+2. **Entering IAP mode erases the firmware.** The Windows driver log
+   says `"return 0x%x after clearup APP, Driver will restart soon"`
+   after the IAP switch. The only known way back to APP mode is a full
+   firmware reflash, which requires bundling a proprietary firmware
+   binary — a legal and technical non-starter for a Linux driver.
+
+3. **Upstream maintainers prohibit firmware flashing in the driver.**
+   Benjamin Berg (libfprint maintainer): *"it is extremely unlikely that
+   a firmware blob can be included in libfprint"*. Alexander Meiler
+   (original 5110 author): *"Our specific 5110 sensor requires a full
+   reflash of the firmware every time the PSK is written."* Firmware
+   operations must remain in a separate tool (`goodix-fp-dump`).
+
+### What the driver keeps
+
+- **Firmware prefix match** — accepts `12117`, `12118`, and future versions
+- **Dynamic PSK Read** — accepts any device PSK hash, no hardcoded value
+- **All-zeros TLS PSK** — works when sensor has matching provisioning
+
+### User-facing impact
+
+| Scenario | Works? | Action needed |
+|----------|--------|---------------|
+| Fresh sensor (never provisioned by Windows) | ✅ Yes | None |
+| Sensor provisioned by `goodix-fp-dump` | ✅ Yes | None |
+| Sensor re-provisioned by Windows driver | ❌ No | Run `goodix-fp-dump` once to reset PSK |
+| Sensor on firmware 12118 (never Windows-provisioned) | ✅ Yes | None |

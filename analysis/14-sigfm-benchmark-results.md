@@ -309,6 +309,12 @@ inconsistent across fingers (index improves −6.9pp, ring worsens +10.4pp).
 
 ### 6.5 Phase 12 Summary
 
+> **Note:** These numbers predate Phase 12e (multi-scale pyramid) and 12f
+> (ratio 0.85→0.80, threshold 6→7). The authoritative final operating point
+> is in `ACTION_PLAN.md` §Phase 12 and `15-advancement-strategy.md` §10–§11:
+> **FRR=27.6% per-attempt / 0.16% effective (5 retries), FAR=0.00%** at
+> threshold=7 with the cross-corpus (5finger + 5finger-s2).
+
 | Phase 12 Sub-task              | Status   | Impact |
 |--------------------------------|----------|--------|
 | 12a: Quality gate (stddev≥25)  | ✅ Keep  | Prevents enrollment of bad frames |

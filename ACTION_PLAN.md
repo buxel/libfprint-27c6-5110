@@ -51,12 +51,13 @@ Detailed porting plan: `analysis/09-upstream-porting-plan.md`
 | 5 | Thermal fix (1 line) | ✅ Done |
 | 5.5 | Host fprintd integration | ✅ Done |
 | 6 | AUR packaging | ✅ Done (not yet published) |
-| 7 | Upstream submission | ⏳ Optional — deprioritised |
+| 7 | Upstream submission | ⏸️ Postponed |
 | 8 | SIGFM Phase 1 improvements | ✅ Done (FRR 90% → 0%) |
-| 9 | AUR publish | ⬜ Ready (Phase 11 done) |
+| 9 | AUR publish | ⏸️ Postponed |
 | 10 | Validation (larger corpus) | ✅ Done (results in doc 14) |
 | 11 | SIGFM Phase 2: RANSAC geometric verification | ✅ Done |
 | 12 | FRR reduction (multi-scale, parameter tuning, algorithm exploration) | ✅ Done (algorithmic ceiling reached) |
+| 13 | Firmware & PSK compatibility (no-flash activation) | ✅ Closed (partial — see below) |
 
 ---
 
@@ -198,12 +199,11 @@ following the same pattern as `goodixmoc`. Skipped the original fork's global
 
 ---
 
-## Phase 7 — Upstream Submission ⏳ Optional
+## Phase 7 — Upstream Submission ⏸️ Postponed
 
 **Depends on:** All phases above complete and passing CI  
 **Detailed spec:** `analysis/09-upstream-porting-plan.md` §Phase 6  
-**Priority:** Secondary — AUR package (Phase 9) is the primary distribution goal.
-Upstream submission is worth trying but not blocking.
+**Priority:** Postponed — will revisit after improvements and validation are complete.
 
 ### Pre-MR checklist
 
@@ -250,9 +250,9 @@ All fixed, reducing FRR from 90% to 0% on a 20-frame corpus.
 
 ---
 
-## Phase 9 — AUR Publish ⬜ Next
+## Phase 9 — AUR Publish ⏸️ Postponed
 
-**Primary distribution goal.**
+**Distribution goal — postponed until improvement/validation work is complete.**
 
 ### Checklist
 
@@ -284,15 +284,17 @@ tests completed.
 
 ### Verdict
 
-The matcher cannot discriminate between different fingers of the same person.
-The `geometric_score()` function uses pairwise angle-counting rather than
-rigid transform verification, producing false matches from random descriptor
-correlations. **Phase 11 (RANSAC) is required before AUR publish.**
+The pre-RANSAC matcher could not discriminate between different fingers of
+the same person. The `geometric_score()` function used pairwise angle-counting
+rather than rigid transform verification. **This was resolved in Phase 11
+(RANSAC).** Post-Phase 12 operating point: FRR=27.6% per-attempt (0.16%
+effective), FAR=0.00%.
 
 ### Remaining validation items
 
 - [ ] Cross-session test: re-enroll, capture verify corpus on a different day
-- [ ] Re-test after Phase 11 RANSAC improvements
+- [x] Re-test after Phase 11 RANSAC improvements (done — see Phase 12 results)
+- [ ] Cross-person impostor test (current FAR=0% is same-person cross-finger only)
 - [ ] Test on other 51xx VID/PID variants (5117, 5120, 521d) if hardware available
 
 ---
@@ -309,7 +311,7 @@ correlations. **Phase 11 (RANSAC) is required before AUR publish.**
 | 1 | Replace `geometric_score()` with `ransac_score()` (2-point rigid transform, 200 iterations, ε=2px, least-squares refinement) | `sigfm.c` | ✅ |
 | 2 | Add cross-check filtering (mutual best match) | `sigfm.c` | ✅ |
 | 3 | Lower `RATIO_TEST` from 0.90 to 0.85 | `sigfm.c` | ✅ |
-| 4 | Re-calibrate `score_threshold` from 24 to 6 | `goodix511.c` | ✅ |
+| 4 | Re-calibrate `score_threshold` from 24 to 6 (later raised to 7 in Phase 12f) | `goodix5xx.c` | ✅ |
 
 ### Results (5-finger corpus, 145 PGMs)
 
@@ -361,7 +363,7 @@ sensor area limitation, not an algorithm limitation.
 | Matcher | SIGFM: FAST-9 + BRIEF-256, 2-level pyramid, ratio test 0.80, cross-check, RANSAC (200 iter, ε=2px, LS refine), `score_threshold = 7` |
 | Preprocessing | Percentile stretch (P0.1→P99) + unsharp mask (boost=4, optimal without factory calibration) |
 | TLS | GnuTLS 1.2, PSK-DHE, 32-byte zero key, in-memory transport |
-| Firmware string | `GF_ST411SEC_APP_12117_GF3658_ST` (same on Windows) |
+| Firmware string | `GF_ST411SEC_APP_121xx` (12117 and 12118 confirmed; prefix match) |
 | Windows algorithm | "Milan v3.02.00.15", up to 50 sub-templates, adaptive learning |
 | Working tree | `libfprint-fork/` |
 | GitHub | `github.com/buxel/libfprint.git` branch `goodixtls-on-1.94.9` |
@@ -385,14 +387,19 @@ sensor area limitation, not an algorithm limitation.
    calibration blob from sensor flash. The Linux driver uses a simple background-frame
    subtraction. Need to investigate whether `goodix_read_otp()` can retrieve the factory
    blob. Deferred — current preprocessing achieves 0% FRR without it.
-5. **PSK per-device vs shared** — the PSK `ba1a86...` is hardcoded. Unknown whether
-   it's per-device or shared across all 27c6:5110 units. Only one device tested.
-   See `analysis/08-session-findings-and-bug-fixes.md`.
-6. **PSK flashing requirement** — `run_5110.py` must be run once to flash the PSK to
-   the sensor. After flashing, the PSK persists in sensor flash. If a libfprint session
-   crashes mid-TLS, the device stays in TLS mode and needs a plain-mode reset before
-   libfprint can re-claim it. See `analysis/08-session-findings-and-bug-fixes.md` §PSK
-   and Firmware, §Python Warm-up Requirement.
+5. ~~**PSK per-device vs shared**~~ — ✅ Resolved. The PSK is **per-provisioning-event**,
+   not per-device or per-model. Windows writes its own PSK on every activation,
+   overwriting the value written by `goodix-fp-dump`. The driver reads the PSK
+   dynamically via `0xe4` and accepts whatever the device returns.
+   See `analysis/16-firmware-psk-compatibility.md` §3–§4.
+6. ~~**PSK flashing requirement**~~ — Partially resolved. Firmware 12118 is
+   protocol-compatible (prefix match, PSK Read works). However, if Windows has
+   re-provisioned the sensor's TLS key, the TLS handshake fails and the only
+   recovery is firmware reflash via `goodix-fp-dump`. In-driver reprovisioning
+   was investigated (PSK Write `0xe0`) but confirmed impossible: the command is
+   only accepted in IAP/bootloader mode, and upstream maintainers prohibit
+   firmware flashing in the driver. See `analysis/16-firmware-psk-compatibility.md`
+   §8–§11, `analysis/17-linux-reprovisioning-feasibility.md`.
 
 ---
 
@@ -464,29 +471,32 @@ calibration (blocked — unknown USB command), boost=4 is optimal.
 
 Comment updated in `goodix5xx.c` with benchmark evidence.
 
-### 12c — Adaptive template learning (MEDIUM, 1–2 weeks) ✅
+### 12c — Adaptive template learning ❌ Rejected
 
-After successful verify, replace weakest enrolled sub-frame with current scan.
-Templates continuously converge toward real usage patterns. This is the single
-most impactful long-term improvement — Windows does this on every match.
-See doc 13 §3 for decompiled `templateStudy()` logic.
+Implemented `fpi_print_sigfm_study()` which replaced the weakest enrolled
+sub-frame (by keypoint count) with a new scan after successful verify.
+Cross-corpus benchmarks revealed a **catastrophic FAR regression**:
+FAR exploded from 0.34% to **14.73%** (43× increase). Impostor frames that
+barely matched got absorbed into the template, creating a positive feedback
+loop. FRR improvement was negligible (+0.7pp). Code has been completely
+removed from the driver.
 
-- [x] Add `fpi_print_sigfm_study()` — compare new frame keypoints against enrolled sub-frames
-- [x] Quality gate: only learn from frames with ≥15 FAST keypoints
-- [x] Plumb into verify and identify paths in `fpi-image-device.c`
-- [ ] Persist updated template across sessions (future: dirty-flag / re-save mechanism)
-- [ ] Cross-session benchmark
+See `analysis/14-sigfm-benchmark-results.md` §6.4 and
+`analysis/15-advancement-strategy.md` §7.2 for full analysis.
 
-Implementation: `fpi_print_sigfm_study()` in `fpi-print.c` finds the enrolled sub-frame
-with fewest keypoints and replaces it if the new scan has strictly more. Session-scoped
-(template improves during use but reverts on next load from disk). Called after every
-successful verify/identify match.
+**Path forward (deferred):** Template study v2 with a separate
+high study-gate threshold and Windows-style multi-layer protection
+(anchor protection, degradation lock, candidate deferral buffer).
+See `analysis/15-advancement-strategy.md` §8.
 
-### 12d — Enrollment quality-ranked insertion (EASY-MEDIUM, days)
+### 12d — Enrollment quality-ranked insertion ⬜ Open (low priority)
 
 During enrollment, maintain sub-frames sorted by quality. Once half-full, reject
 frames worse than all existing sub-frames. Optionally increase `nr_enroll_stages`
 from 20 to 25–30 (UX tradeoff). See doc 13 §8.
+
+Benchmarking (doc 15 §11) showed enrollment strategy (E2/E4/E5) had no effect
+at the current operating point. Deprioritised.
 
 ### 12e — Multi-scale FAST-9 (2-level pyramid) ✅ Done
 
@@ -512,7 +522,7 @@ from ~100 to ~128 per frame.
 | B4 Hessian keypoint filter | **Rejected** | Destroys FRR (+6 to +70pp). Every keypoint matters. |
 | D2 Exhaustive triple-based affine | **Neutral** | Identical scores to RANSAC. Disabled. |
 | D2 at threshold=6 | **Worse** | Inflates 2 impostor scores 5→6, creating extra false accepts |
-| Study v2 re-benchmark | **Worse** | +0.7 to +1.3pp FRR at new operating point |
+| Study v2 re-benchmark | **Worse** | +0.7 to +1.3pp FRR at new operating point; v1 already rejected (FAR 43×) |
 | RANSAC iterations (100-1000) | **No effect** | Solution space too small (<190 pairs) |
 
 Full details: `analysis/15-advancement-strategy.md` §7 (87-idea audit), §9-§11 (experiments).
@@ -523,18 +533,96 @@ Full details: `analysis/15-advancement-strategy.md` §7 (87-idea audit), §9-§1
 |---|-----------|--------|-------|
 | — | Per-pixel factory calibration | **Blocked** | USB command to retrieve ~140KB kr/b blob unknown. See doc 13 §4. |
 | — | Match retry (re-capture) | Skipped | Already covered by fprintd's 5-retry mechanism. |
+| — | Template study v2 | **Deferred** | v1 rejected (FAR 43×). v2 needs separate study gate + Windows-style safeguards. See doc 15 §8. |
+| — | Enrollment quality-ranked insertion | **Deferred** | Enrollment strategy sweeps (E2/E4/E5) showed no effect at current config. |
+
+---
+
+## Next Steps (priority order)
+
+### 1. Remaining improvements to try
+
+See §"Improvement Assessment" below for full analysis.
+
+### 2. Validation improvements
+
+| Task | Effort | Notes |
+|------|--------|-------|
+| Cross-person impostor test | 1 hr | Current FAR=0% is same-person cross-finger only |
+| Cross-session corpus (different day) | 1 hr | Captures skin moisture/dryness variability |
+| Enrollment quality gating (12a unchecked item) | 30 min | Only count quality-passing frames toward enroll progress |
+
+### 3. Documentation polish
+
+| Task | Effort | Notes |
+|------|--------|-------|
+| Add PSK setup note to README | 15 min | Dual-boot users need `goodix-fp-dump` after Windows reprovisioning |
+| Update Arch Wiki stale link | 5 min | `rootd/libfprint` → current fork |
+
+---
+
+## Improvement Assessment (2026-02-23)
+
+**Current operating point:** FRR=27.6% per-attempt / 0.16% effective (5 retries),
+FAR=0.00% cross-corpus. Threshold=7, multi-scale, ratio=0.80, RANSAC 200.
+
+**What has been exhaustively tested and ruled out:**
+- All RANSAC parameters (iterations, ε, constraints) — converged
+- All enrollment strategies (E2/E4/E5, quality-ranked, diversity-prune) — no effect at threshold=7
+- Hessian keypoint filtering (B4) — destroys FRR (+6 to +70pp)
+- Exhaustive triples (D2) — identical to RANSAC (solution space too small)
+- Template study v1/v2 — v1 FAR catastrophe, v2 FRR regression at new config
+- Boost >4 — FAR catastrophe without factory calibration
+- Oriented BRIEF — removed orientation discriminator, hurt FAR
+- RANSAC constraints (rotation, translation) — hurt genuine more than impostor
+
+### Ideas still worth trying
+
+| # | Idea | Effort | Expected Impact | Risk | Source |
+|---|------|--------|-----------------|------|--------|
+| **A6** | **12-bit working space** — process in 12-bit, quantize to 8 only for FAST/BRIEF. Preserves dynamic range during unsharp mask; may produce better descriptors. | ~30 min | Low-Med | Low — purely additive, no regression risk | doc 15 §A6 |
+| **E6** | **Progressive enrollment quality** — strict quality threshold for first 10 frames (ensure high-quality core), lenient for last 10 (ensure placement diversity). | ~1 hr | Low | Low — only affects enrollment, not matcher | doc 15 §E6 |
+| **E3** | **Score-based sub-template sorting** — during enrollment, rank by inter-template RANSAC score (how well each frame matches the others). Keep well-connected frames, discard outliers. | ~1 hr | Low-Med | Low | doc 15 §E3 |
+| **D10** | **Multi-criteria accept** — combine inlier count with inlier spatial spread or descriptor quality. Might distinguish the 1 stubborn false accept (right-ring/capture_0007, score=7 exactly at threshold). | ~2 hr | Low | Med — could hurt genuine borderline matches too | doc 15 §D10 |
+
+### Ideas with uncertain feasibility (higher effort)
+
+| # | Idea | Effort | Notes |
+|---|------|--------|-------|
+| **A3** | **Per-pixel factory calibration** | Unknown | **Blocked** — USB command to read ~140KB blob unknown. Would unlock boost>4 and dramatically improve preprocessing. Highest single-item impact but requires reverse engineering. |
+| **E7** | **Spatial offset tracking between sub-templates** | Days | Complex. Would let matcher restrict search to overlapping regions. Benefit unclear on 64×80. |
+| **F6** | **Hybrid pixel-correlation + SIGFM** | Days | Use pixel-level similarity as tiebreaker for borderline RANSAC scores. Windows does this (`FUN_180033e30`). Significant complexity. |
+
+### Verdict
+
+The 4 "worth trying" ideas are all low-effort (\< 2 hrs each) with limited
+downside. **A6 (12-bit working space)** and **E3 (score-based enrollment
+sorting)** are the most likely to yield measurable improvement. The 8 failing
+captures (27.6% FRR) all have sufficient keypoints (112-128) but score 0-6 —
+the fundamental constraint is placement variation on a 3.2×4.0 mm sensor area.
+Any improvement at this point is marginal; the algorithmic ceiling is close.
 
 ---
 
 ## Postponed Items
 
-Community engagement tasks from early research. Will revisit when driver quality is
-confirmed with more data.
+Activities deferred until improvement/validation work is complete.
 
+### AUR Publish (Phase 9)
+- PKGBUILD ready (`packaging/aur/PKGBUILD`), branch pushed
+- Remaining: fill maintainer, `post_install()` hook, `makepkg -si` test, publish
+
+### Upstream Submission (Phase 7)
+- MR description drafted (`MR_DESCRIPTION.md`)
+- Pre-MR checklist partially complete (see Phase 7 section)
+- Blockers: @hadess contact, 3-device testing, CI, pointer-cast warnings
+
+### Community Engagement
 - Join Goodix Fingerprint Linux Development Discord
 - Contact @gulp about PR #32 resubmission status
 - Contact @egormanga about project status
 - Update Arch Wiki: fix stale `rootd/libfprint` link → `goodix-fp-linux-dev/libfprint`
+- File `fpi-device.c` monotonic timer bug upstream (1-line fix)
 
 ---
 
@@ -577,6 +665,9 @@ confirmed with more data.
 | 2026-02-22 | **Phase 11 complete.** Replaced `geometric_score()` with RANSAC + cross-check + LS refinement. FAR: 45.7% → **0.00%** (0/580). FRR per-attempt: 13.7% → 42.1% (effective 5-retry FRR: ~1.3%). Impostor max score: 5 (threshold=6). Tested 10+ parameter configurations including rotation-steered BRIEF (hurt: removed orientation discriminator), physical transform constraints (hurt: restricted genuine placement variation), Hamming distance ceiling (no effect), multiple FAST thresholds and MAX_KP values (marginal). Final config: RATIO_TEST=0.85, RANSAC_INLIER_THRESH=2.0px, 200 iterations, cross-check filtering. Phase 9 unblocked. |
 | 2026-02-22 | Added **Phase 12** (FRR reduction roadmap). Assessed Windows driver algorithms (docs 11, 13) against Phase 11 benchmark results: quality gating (12a), boost increase (12b), adaptive template learning (12c), enrollment quality ranking (12d). Per-pixel calibration blocked (unknown USB command). Multi-scale detection and Hessian deferred. Match retry skipped (fprintd covers it). |
 | 2026-02-22 | **Phase 12a complete:** quality gating added to `goodix5xx.c` — pixel stddev check rejects flat/garbage frames with `FP_DEVICE_RETRY_CENTER_FINGER` before SIGFM extraction. **Phase 12b complete (no change):** boost factor sweep [4, 6, 8] showed boost > 4 catastrophically degrades FAR (impostor max: 5 → 23 → 33) due to fixed-pattern noise amplification without per-pixel factory calibration. Boost=4 confirmed optimal. Comment in `goodix5xx.c` updated with benchmark evidence. |
-| 2026-02-22 | **Phase 12c complete (session-scoped):** adaptive template learning via `fpi_print_sigfm_study()` in `fpi-print.c`. After successful verify/identify, weakest enrolled sub-frame (by FAST keypoint count) is replaced if the new scan has strictly more keypoints (min 15). Plumbed into both verify and identify paths in `fpi-image-device.c`. Learning is session-scoped — template improves during use but not persisted to disk yet. Persistence deferred (requires dirty-flag mechanism or fprintd integration). |
+| 2026-02-22 | **Phase 12c rejected:** adaptive template learning (`fpi_print_sigfm_study()`) implemented and benchmarked. FAR regression 0.34% → 14.73% (43×). FRR improvement negligible (+0.7pp). Code removed from driver. Root cause: `score_threshold` too low to distinguish genuine-for-learning vs impostor. See docs 14 §6.4, 15 §7.2. v2 strategy (separate study gate) deferred to §8. |
 | 2026-02-22 | **Phase 12 (FRR reduction) — algorithmic work complete.** B2 multi-scale pyramid (+2.7pp). RATIO_TEST 0.85→0.80. score_threshold 6→7 (kills last false accept). 87 ideas audited in doc 15 §7.3 (33 done, 16 rejected, 38 open/deferred). |
+| 2026-02-23 | **Phase 13 closed — partial success.** Firmware prefix match and dynamic PSK read work (no hardcoded version/PSK). However, in-driver PSK reprovisioning is not viable: PSK Write (`0xe0`) only works in IAP/bootloader mode, and upstream prohibits firmware flashing in the driver. Windows-reprovisioned sensors require one-time `goodix-fp-dump` reflash. PSK write code reverted from driver. Sensitive files (registry hives, DPAPI keys, binaries) removed from `analysis/win-system/`. Full analysis: docs 16, 17. |
 | 2026-02-23 | **Phase 12 closed — algorithmic ceiling reached.** Exhaustive exploration: B4 Hessian (rejected, destroys FRR), D2 exhaustive triples (neutral — identical to RANSAC, disabled), RANSAC iteration sweep (no effect), study v2 re-bench (worse at new config), E4/E2 enrollment sweep (no effect). Final operating point: **FRR=27.6% per-attempt / 0.16% effective (5 retries), FAR=0.00%** cross-corpus. Score gap clean: impostor max=6, genuine MATCH min=8. Remaining 8/29 failures are placement mismatches on 64×80 sensor — not recoverable by any algorithm. Phase 9 (AUR publish) is now the clear next step. Full analysis: `analysis/15-advancement-strategy.md` §7–§14. |
+| 2026-02-23 | **Action plan consistency review.** Fixed Phase 12c status: was marked ✅ Done but code was rejected and removed (FAR 43× regression). Updated to ❌ Rejected with cross-references to docs 14 §6.4, 15 §7.2. Fixed Phase 10 verdict (was present-tense "Phase 11 required" → past-tense reflecting completion). Marked Phase 10 re-test item complete. Updated Phase 11 score_threshold note (6 → 7 in Phase 12f). Added 12d benchmark evidence. Added cross-person impostor test to validation. Added Next Steps section with prioritised actionable tasks. |
+| 2026-02-23 | **AUR publish and upstream postponed.** Phase 9 and Phase 7 moved to Postponed. Next Steps refocused on validation improvements and remaining algorithmic opportunities. Improvement assessment added. |

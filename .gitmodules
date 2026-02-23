@@ -1,3 +1,6 @@
 [submodule "libfprint-fork"]
 	path = libfprint-fork
         url = https://github.com/buxel/libfprint.git
+[submodule "goodix-fp-dump"]
+	path = goodix-fp-dump
+	url = https://github.com/goodix-fp-linux-dev/goodix-fp-dump.git

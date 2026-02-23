@@ -1,0 +1,147 @@
+; gfspi.dll import table
+
+; === Crypto/DPAPI related ===
+
+[ADVAPI32.dll]
+  IAT RVA 0x79010: CryptGenRandom
+  IAT RVA 0x79018: CryptReleaseContext
+  IAT RVA 0x79020: CryptAcquireContextW
+  IAT RVA 0x79028: RegCloseKey
+  IAT RVA 0x79040: RegOpenKeyExW
+
+[CRYPT32.dll]
+  IAT RVA 0x79060: CryptUnprotectData
+  IAT RVA 0x79068: CryptProtectData
+
+
+; === ALL IMPORTS ===
+
+[ntdll.dll]
+  DbgPrintEx
+  RtlUnwindEx
+  RtlPcToFileHeader
+
+[KERNEL32.dll]
+  WriteFile
+  OutputDebugStringW
+  CloseHandle
+  GetLastError
+  HeapAlloc
+  HeapFree
+  GetProcessHeap
+  InitializeCriticalSection
+  EnterCriticalSection
+  LeaveCriticalSection
+  DeleteCriticalSection
+  SetFilePointer
+  HeapReAlloc
+  HeapSize
+  SetStdHandle
+  WaitForSingleObject
+  Sleep
+  TerminateThread
+  ResumeThread
+  FindFirstFileW
+  FindClose
+  CreateFileW
+  CreateDirectoryW
+  GetSystemDirectoryW
+  GetLocalTime
+  SetEvent
+  ResetEvent
+  CreateEventW
+  GetTickCount64
+  SetUnhandledExceptionFilter
+  LocalFree
+  GetSystemTimeAsFileTime
+  GetCurrentThreadId
+  GetCurrentProcessId
+  DeleteFileW
+  WriteConsoleW
+  QueryPerformanceCounter
+  QueryPerformanceFrequency
+  GetStringTypeW
+  CreateToolhelp32Snapshot
+  Process32FirstW
+  Process32NextW
+  CopyFileW
+  FreeEnvironmentStringsW
+  UnhandledExceptionFilter
+  RtlCaptureContext
+  RtlLookupFunctionEntry
+  RtlVirtualUnwind
+  GetEnvironmentStringsW
+  GetCurrentProcess
+  TerminateProcess
+  IsProcessorFeaturePresent
+  __C_specific_handler
+  InitializeSListHead
+  IsDebuggerPresent
+  GetStartupInfoW
+  GetModuleHandleW
+  GetCommandLineW
+  GetCommandLineA
+  InterlockedFlushSList
+  SetLastError
+  FlsAlloc
+  FlsGetValue
+  FlsSetValue
+  FlsFree
+  InitializeCriticalSectionEx
+  EncodePointer
+  RaiseException
+  CreateThread
+  ExitThread
+  FreeLibrary
+  FreeLibraryAndExitThread
+  GetModuleHandleExW
+  ExitProcess
+  GetProcAddress
+  GetModuleFileNameW
+  GetStdHandle
+  GetFileType
+  ReadFile
+  GetConsoleMode
+  ReadConsoleW
+  GetConsoleOutputCP
+  GetFileSizeEx
+  SetFilePointerEx
+  MultiByteToWideChar
+  WideCharToMultiByte
+  InitializeCriticalSectionAndSpinCount
+  LoadLibraryExW
+  LCMapStringW
+  FlushFileBuffers
+  FindFirstFileExW
+  FindNextFileW
+  IsValidCodePage
+  GetACP
+  GetOEMCP
+  GetCPInfo
+  SetEndOfFile
+
+[ADVAPI32.dll]
+  EventUnregister
+  EventSetInformation
+  CryptGenRandom
+  CryptReleaseContext
+  CryptAcquireContextW
+  RegCloseKey
+  RegOpenCurrentUser
+  EventRegister
+  RegOpenKeyExW
+  RegQueryValueExW
+  EventWriteTransfer
+
+[api-ms-win-power-base-l1-1-0.dll]
+  CallNtPowerInformation
+
+[api-ms-win-power-setting-l1-1-0.dll]
+  PowerSettingUnregisterNotification
+  PowerSettingRegisterNotification
+  PowerGetActiveScheme
+
+[CRYPT32.dll]
+  CryptUnprotectData
+  CryptProtectData
+
