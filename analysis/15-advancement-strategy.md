@@ -450,7 +450,7 @@ mentioned anywhere. **87 total ideas** identified across 12 categories.
 | D7 | Rotation constraint (±15–30°) | doc 14 | **Rejected** — genuine placements vary more than expected |
 | D8 | Translation constraint (20–30px) | doc 14 | **Rejected** — genuine shifts are large on tiny sensor |
 | D9 | Pixel-level overlap scoring | doc 15 | **Rejected** — unnecessary complexity |
-| D10 | Multi-criteria accept/reject decision tree | doc 15 | **Deferred** — keep simple threshold |
+| D10 | Multi-criteria accept/reject decision tree | doc 15 | **❌ Rejected** — clean score gap (genuine FAIL max=5, MATCH min=8, threshold=7). No borderline cases exist to disambiguate; additional criteria would add complexity with zero benefit. |
 | D11 | Least-squares refinement after RANSAC | doc 14 | **✅ Done** |
 
 #### E. Enrollment / Template Management
@@ -459,10 +459,10 @@ mentioned anywhere. **87 total ideas** identified across 12 categories.
 |---|------|--------|--------|
 | E1 | Adaptive template study (replace weakest sub-frame) | docs 11, 13, 14, 15 | **❌ v1 Rejected** — naive approach absorbs impostors (FAR 0.34%→14.73%). See §8 for v2 strategy. |
 | E2 | Increase sub-template count (20→30–40; Windows uses 50) | docs 11, 13 | **Tested** — no effect at thresh=7 (30 captures identical to 20). See §11. |
-| E3 | Score-based sub-template sorting during enrollment | doc 13 | **Open** — keep highest quality, replace lowest |
+| E3 | Score-based sub-template sorting during enrollment | doc 13 | **❌ Rejected** — FRR 28.6%→36.8% (sort-20), 43.4% (sort-15), 49.3% (sort-10) at thresh=7. Removing any enrollment frames loses placement diversity critical for 64×80 sensor. |
 | E4 | Quality-ranked insertion during enrollment | doc 13 | **Tested** — no effect at thresh=7 (identical FRR/FAR). See §11. |
 | E5 | Sub-template pruning / deduplication | doc 13 | **Tested** — trades FRR for FAR; not usable. See §9, §11. |
-| E6 | Progressive quality thresholds during enrollment | doc 13 | **Open** — strict early (high quality), lenient later (placement diversity) |
+| E6 | Progressive quality thresholds during enrollment | doc 13 | **❌ Rejected** — no-op when strict < kp range (all frames ≥84 kp); FRR 28.6%→32.0% when strict=120 actually partitions frames. Frame reordering hurts placement diversity. |
 | E7 | Stitch info (spatial offsets between sub-templates) | docs 11, 13 | **Deferred** — interesting but complex |
 | E8 | Template degradation counter (lock after N failed updates) | doc 13 | **Open** — relevant to v2 study strategy (§8) |
 | E9 | Re-enrollment after preprocessing changes | doc 2 | **Known** — documented caveat |

@@ -460,6 +460,8 @@ usage(const char *argv0)
         "          [--quality-enroll]     quality-ranked enrollment insertion (E4)\n"
         "          [--diversity-prune]    diversity-based sub-template pruning (E5)\n"
         "          [--sort-subtemplates] rank enrolled frames, keep best N\n"
+        "          [--progressive-enroll] two-pass enrollment: strict then lenient (E6)\n"
+        "          [--progressive-strict=N] keypoint threshold for strict phase (default: 15)\n"
         "          [--max-subtemplates=N] max enrolled frames to keep (default: 20)\n"
         "\n"
         "Reads processed PGM images (64×80, as output by img-capture or replay-pipeline),\n"
@@ -494,6 +496,8 @@ main(int argc, char *argv[])
     int do_sort = 0;
     int do_quality_enroll = 0;
     int do_diversity_prune = 0;
+    int do_progressive_enroll = 0;
+    int progressive_strict = 15;
     int max_subtemplates = 20;
 
     enum { NONE, ENROLL, VERIFY } mode = NONE;
@@ -525,6 +529,11 @@ main(int argc, char *argv[])
             do_quality_enroll = 1;
         } else if (strcmp(argv[i], "--diversity-prune") == 0) {
             do_diversity_prune = 1;
+        } else if (strcmp(argv[i], "--progressive-enroll") == 0) {
+            do_progressive_enroll = 1;
+        } else if (strncmp(argv[i], "--progressive-strict=", 21) == 0) {
+            progressive_strict = atoi(argv[i] + 21);
+            do_progressive_enroll = 1;
         } else if (strncmp(argv[i], "--max-subtemplates=", 19) == 0) {
             max_subtemplates = atoi(argv[i] + 19);
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -573,6 +582,19 @@ main(int argc, char *argv[])
     fprintf(out, "Enrollment: %d frames (stddev gate: %d, keypoint gate: %d)\n",
            n_enroll, stddev_gate, quality_gate);
 
+    /* For progressive enrollment (E6): buffer frames that pass quality_gate
+     * but not progressive_strict threshold.  After the strict phase,
+     * deferred frames fill remaining template slots to add diversity. */
+    SigfmImgInfo *deferred_info[512];
+    int deferred_kp[512];
+    int n_deferred = 0;
+    int progressive_core = max_subtemplates / 2;
+
+    if (do_progressive_enroll) {
+        fprintf(out, "  Progressive enrollment: strict=%d (core: %d slots), lenient=%d\n",
+               progressive_strict, progressive_core, quality_gate);
+    }
+
     for (int i = 0; i < n_enroll; i++) {
         int w, h;
         unsigned char *pix = read_pgm(enroll_files[i], &w, &h);
@@ -615,6 +637,19 @@ main(int argc, char *argv[])
             continue;
         }
 
+        /* Progressive enrollment (E6): strict phase defers mid-quality frames */
+        if (do_progressive_enroll && tmpl.count < progressive_core) {
+            if (kp < progressive_strict) {
+                /* Passes normal gate but not strict — defer to lenient phase */
+                deferred_info[n_deferred] = info;
+                deferred_kp[n_deferred] = kp;
+                n_deferred++;
+                fprintf(out, "  [%02d] DEFER  (keypoints %d < %d, strict phase): %s\n",
+                       i, kp, progressive_strict, enroll_files[i]);
+                continue;
+            }
+        }
+
         if (do_quality_enroll) {
             int rc = template_add_quality(&tmpl, info, max_subtemplates / 2);
             if (rc < 0) {
@@ -629,6 +664,24 @@ main(int argc, char *argv[])
             template_add(&tmpl, info);
             fprintf(out, "  [%02d] OK     (keypoints: %d): %s\n", i, kp, enroll_files[i]);
         }
+    }
+
+    /* Progressive enrollment (E6): lenient phase — add deferred frames */
+    if (do_progressive_enroll && n_deferred > 0) {
+        int added = 0;
+        fprintf(out, "\n  Lenient phase: %d deferred frames available\n", n_deferred);
+        for (int i = 0; i < n_deferred; i++) {
+            if (tmpl.count >= max_subtemplates) {
+                fprintf(out, "  [D%02d] SKIP   (template full): kp=%d\n", i, deferred_kp[i]);
+                sigfm_free_info(deferred_info[i]);
+                continue;
+            }
+            template_add(&tmpl, deferred_info[i]);
+            fprintf(out, "  [D%02d] OK     (keypoints: %d, lenient phase)\n",
+                   i, deferred_kp[i]);
+            added++;
+        }
+        fprintf(out, "  Lenient phase: added %d/%d deferred frames\n", added, n_deferred);
     }
 
     int enrolled = tmpl.count;

@@ -542,7 +542,8 @@ Full details: `analysis/15-advancement-strategy.md` §7 (87-idea audit), §9-§1
 
 ### 1. Remaining improvements to try
 
-See §"Improvement Assessment" below for full analysis.
+**All exhausted.** See §"Improvement Assessment" below — every candidate (E3, E6,
+D10) has been benchmarked and rejected. The algorithmic ceiling has been reached.
 
 ### 2. Validation improvements
 
@@ -576,17 +577,28 @@ FAR=0.00% cross-corpus. Threshold=7, multi-scale, ratio=0.80, RANSAC 200.
   (intra-session FRR 29.8% → 29.8%, cross-session FRR 28.6% → 29.3%).
   FAST-9/BRIEF-256 are binary/threshold operators; finer input precision
   doesn't translate to better feature detection.
+- E3 (score-based enrollment sorting) — **REJECTED**: FRR 28.6%→36.8% (sort-20),
+  43.4% (sort-15), 49.3% (sort-10). Removing enrollment frames loses placement
+  diversity critical for the tiny 64×80 sensor.
+- E6 (progressive enrollment quality) — **REJECTED**: no-op when strict threshold
+  < keypoint range (all frames ≥84 kp); FRR 28.6%→32.0% when strict=120
+  actually partitions frames. Frame reordering hurts placement diversity.
+- D10 (multi-criteria accept/reject) — **REJECTED**: clean score gap (genuine FAIL
+  max=5, MATCH min=8, threshold=7). No borderline cases exist; additional criteria
+  would add complexity with zero benefit.
 - Boost >4 — FAR catastrophe without factory calibration
 - Oriented BRIEF — removed orientation discriminator, hurt FAR
 - RANSAC constraints (rotation, translation) — hurt genuine more than impostor
 
 ### Ideas still worth trying
 
-| # | Idea | Effort | Expected Impact | Risk | Source |
-|---|------|--------|-----------------|------|--------|
-| **E6** | **Progressive enrollment quality** — strict quality threshold for first 10 frames (ensure high-quality core), lenient for last 10 (ensure placement diversity). | ~1 hr | Low | Low — only affects enrollment, not matcher | doc 15 §E6 |
-| **E3** | **Score-based sub-template sorting** — during enrollment, rank by inter-template RANSAC score (how well each frame matches the others). Keep well-connected frames, discard outliers. | ~1 hr | Low-Med | Low | doc 15 §E3 |
-| **D10** | **Multi-criteria accept** — combine inlier count with inlier spatial spread or descriptor quality. Might distinguish the 1 stubborn false accept (right-ring/capture_0007, score=7 exactly at threshold). | ~2 hr | Low | Med — could hurt genuine borderline matches too | doc 15 §D10 |
+**None remaining.** All candidate improvements have been tested and rejected:
+
+| # | Idea | Result |
+|---|------|--------|
+| **E3** | Score-based sub-template sorting | **❌ Rejected** — FRR 28.6%→36.8% (sort-20), 43.4% (sort-15), 49.3% (sort-10). Removing any enrollment frames loses placement diversity critical for 64×80 sensor. |
+| **E6** | Progressive enrollment quality | **❌ Rejected** — no-op when strict threshold < keypoint range (all frames ≥84 kp). FRR 28.6%→32.0% when strict=120 actually partitions frames. Any frame reordering hurts. |
+| **D10** | Multi-criteria accept | **❌ Rejected** — clean score gap (genuine FAIL max=5, MATCH min=8). No borderline cases exist at threshold=7; additional criteria would add complexity with zero benefit. |
 
 ### Ideas with uncertain feasibility (higher effort)
 
@@ -598,12 +610,16 @@ FAR=0.00% cross-corpus. Threshold=7, multi-scale, ratio=0.80, RANSAC 200.
 
 ### Verdict
 
-The 4 "worth trying" ideas are all low-effort (\< 2 hrs each) with limited
-downside. **E3 (score-based enrollment
-sorting)** is the most likely to yield measurable improvement. The 8 failing
-captures (27.6% FRR) all have sufficient keypoints (112-128) but score 0-6 —
-the fundamental constraint is placement variation on a 3.2×4.0 mm sensor area.
-Any improvement at this point is marginal; the algorithmic ceiling is close.
+**All algorithmic improvement candidates have been exhaustively tested.** The
+current operating point (FRR=27.6% per-attempt / 0.16% effective with 5 retries,
+FAR=0.00%) represents the algorithmic ceiling for FAST-9 + BRIEF-256 on a 64×80
+sensor. Every enrollment modification strategy (E3, E4, E5, E6), preprocessing
+change (A6, boost tuning), and geometric refinement (D2, D7-D10) either had no
+effect or hurt FRR. The fundamental constraint remains placement variation on the
+3.2×4.0 mm sensor area. Future gains require either:
+- **A3 (per-pixel factory calibration)** — unlocks boost>4 and dramatic preprocessing improvement, but blocked by unknown USB calibration command
+- **Alternative feature detectors** — ORB, AKAZE, etc. (significant rewrite)
+- **Larger enrollment corpus** — more diverse real-world captures
 
 ---
 
@@ -675,3 +691,4 @@ Activities deferred until improvement/validation work is complete.
 | 2026-02-23 | **Action plan consistency review.** Fixed Phase 12c status: was marked ✅ Done but code was rejected and removed (FAR 43× regression). Updated to ❌ Rejected with cross-references to docs 14 §6.4, 15 §7.2. Fixed Phase 10 verdict (was present-tense "Phase 11 required" → past-tense reflecting completion). Marked Phase 10 re-test item complete. Updated Phase 11 score_threshold note (6 → 7 in Phase 12f). Added 12d benchmark evidence. Added cross-person impostor test to validation. Added Next Steps section with prioritised actionable tasks. |
 | 2026-02-23 | **AUR publish and upstream postponed.** Phase 9 and Phase 7 moved to Postponed. Next Steps refocused on validation improvements and remaining algorithmic opportunities. Improvement assessment added. |
 | 2026-02-23 | **A6 (12-bit working space) rejected.** Implemented in driver and `replay-pipeline --12bit`. Benchmarked: intra-session FRR 29.8% → 29.8% (identical), cross-session FRR 28.6% → 29.3% (slightly worse), FAR 0.00% → 0.00%. FAST-9/BRIEF-256 are binary/threshold operators that don't benefit from finer input precision. Driver reverted; benchmark tooling kept for reference. |
+| 2026-02-23 | **E3, E6, D10 — all rejected. Algorithmic improvement space exhausted.** E3 (score-based enrollment sorting): FRR +8–21pp at all settings. E6 (progressive enrollment quality): no-op at thresholds below keypoint range; FRR +3.4pp at strict=120. D10 (multi-criteria accept): clean score gap (FAIL max=5, MATCH min=8) means no borderline cases exist. Benchmark tooling (`--progressive-enroll`) added to `sigfm-batch` for reference. Verdict updated: algorithmic ceiling confirmed. |
