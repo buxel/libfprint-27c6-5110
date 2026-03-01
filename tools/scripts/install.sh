@@ -34,10 +34,21 @@ command -v pacman  &>/dev/null || die "pacman not found — this script requires
 # makepkg --noconfirm does not auto-answer pacman's conflict prompt when an
 # existing libfprint needs to be replaced. Remove it up-front so the install
 # proceeds unattended.
-for pkg in libfprint libfprint-goodixtls-git; do
-    if pacman -Q "$pkg" &>/dev/null; then
-        info "Removing conflicting package: $pkg"
-        sudo pacman -Rdd --noconfirm "$pkg"
+#
+# pacman -Q can resolve "provides" names (e.g. querying "libfprint" returns
+# "libfprint-goodixtls511-git" if that package provides libfprint), but
+# pacman -R requires the *real* package name.  Resolve it first.
+_removed=()
+for pkg in libfprint libfprint-goodixtls-git libfprint-goodixtls511-git; do
+    real_pkg=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $1}') || true
+    if [[ -n "$real_pkg" ]]; then
+        # Skip if we already removed this real package via an earlier alias
+        if printf '%s\n' "${_removed[@]}" | grep -qxF "$real_pkg" 2>/dev/null; then
+            continue
+        fi
+        info "Removing conflicting package: $real_pkg (matched via $pkg)"
+        sudo pacman -Rdd --noconfirm "$real_pkg"
+        _removed+=("$real_pkg")
     fi
 done
 
