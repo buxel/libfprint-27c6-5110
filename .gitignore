@@ -19,6 +19,9 @@ tools/benchmark/replay-pipeline
 # AUR makepkg clone directory (created by makepkg -s)
 packaging/aur/libfprint-goodixtls511-git/
 
+# Developer convenience files not for upstream
+libfprint-fork/tests/goodixtls511/record.sh
+
 # AUR makepkg build artifacts
 packaging/aur/src/
 packaging/aur/pkg/
