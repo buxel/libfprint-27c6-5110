@@ -2,7 +2,7 @@
 # Contributor: 0x00002a <markus@optiikka.io>
 
 pkgname=libfprint-goodixtls511-git
-pkgver=r1830.2eb51d3
+pkgver=r1833.5313cd2
 pkgrel=1
 pkgdesc="libfprint with Goodix GF511 (27c6:5110) TLS fingerprint sensor driver"
 arch=('x86_64')

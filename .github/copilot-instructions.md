@@ -67,6 +67,22 @@ Non-conformance creates refactoring debt that delays the merge request.
 - `libfprint/drivers/goodixtls/sigfm/` — Signal-Feature Matching library
 - `tests/goodixtls511/` — umockdev pcap replay test
 
+## Session Continuity
+
+When working on a multi-step plan or investigation:
+
+- **Always update the relevant plan/handoff document** (e.g. files in
+  `analysis/`) with current progress before ending a session or switching
+  context.
+- Record **what has been completed**, **what is in progress**, and
+  **the active problem under investigation** (if any) — including the
+  specific hypothesis, error message, or question being pursued.
+- The goal is zero-cost pickup: any future session (or a different agent)
+  should be able to read the document and resume exactly where work left off
+  without re-deriving context.
+- Prefer appending a dated "Session checkpoint" section rather than
+  overwriting earlier notes, so the investigation history is preserved.
+
 ## Testing
 
 - `meson test -C build goodixtls511` — run the driver replay test

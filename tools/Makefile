@@ -12,7 +12,7 @@ CFLAGS  ?= -O2 -g -Wall -Wextra -Wno-unused-parameter
 LDFLAGS ?=
 
 # SIGFM source (linked directly — no library dependency)
-SIGFM_DIR   = ../libfprint-fork/libfprint/sigfm
+SIGFM_DIR   = ../libfprint-fork/libfprint/drivers/goodixtls
 SIGFM_SRC   = $(SIGFM_DIR)/sigfm.c
 SIGFM_INC   = -I$(SIGFM_DIR)
 
