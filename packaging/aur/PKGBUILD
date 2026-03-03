@@ -2,7 +2,7 @@
 # Contributor: 0x00002a <markus@optiikka.io>
 
 pkgname=libfprint-goodixtls511-git
-pkgver=r1833.5313cd2
+pkgver=r1814.0ad27c6
 pkgrel=1
 pkgdesc="libfprint with Goodix GF511 (27c6:5110) TLS fingerprint sensor driver"
 arch=('x86_64')
@@ -24,10 +24,11 @@ optdepends=('fprintd: D-Bus daemon for fingerprint authentication')
 # repo so no push to a remote is required.  When published on the AUR, set
 # url= above and remove the override so the normal git+https source is used.
 _repo="${LIBFPRINT_LOCAL_REPO:-}"
+_branch="goodixtls-upstream-mr"
 if [[ -n "$_repo" ]]; then
-    source=("${pkgname}::git+file://${_repo}")
+    source=("${pkgname}::git+file://${_repo}#branch=${_branch}")
 else
-    source=("${pkgname}::git+${url}#branch=goodixtls-on-1.94.9")
+    source=("${pkgname}::git+${url}#branch=${_branch}")
 fi
 sha256sums=('SKIP')
 
@@ -44,8 +45,7 @@ build() {
         -Ddoc=false \
         -Dgtk-examples=false \
         -Dintrospection=false \
-        -Dgoodixtls=enabled \
-        -Dc_args="-Wno-error=incompatible-pointer-types"
+        -Dgoodixtls=enabled
     ninja -C build
 }
 
