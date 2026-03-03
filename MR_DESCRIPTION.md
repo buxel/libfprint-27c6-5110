@@ -1,17 +1,29 @@
 # MR: Add Goodix GF511 (27c6:5110) fingerprint sensor driver
 
 **Branch:** `goodixtls-upstream-mr` (based on 1.94.9 / `dc8b05f`)
-**Details:** [libfprint-27c6-5110](https://github.com/buxel/libfprint-27c6-5110) (analysis, benchmarks, tooling)
 
 ---
 
 ## Summary
 
 Adds support for the Goodix GF511 capacitive fingerprint sensor
-(USB `27c6:5110`, die GF3658), found in Lenovo ThinkBook / IdeaPad and
-Huawei MateBook laptops. Standard `FpImageDevice` pattern with a
-custom SIGFM matcher for the small sensor images. Only new runtime
-dependency is GnuTLS (already an optional dep in the build system).
+(USB `27c6:5110`, die GF3658), found in Huawei MateBook and Lenovo
+ThinkBook / IdeaPad laptops.  The sensor encrypts all image data
+over USB using TLS 1.2 (PSK-DHE); the GnuTLS dependency is
+unavoidable for this device class.
+
+The driver layers are designed for the broader Goodix 51xx MOH
+(Match-on-Host) family — 5117, 5120, 521d share the same protocol
+and only need a thin per-device shim similar to `goodix511.c`.
+This MR adds the 5110 as the first supported device.
+
+**Firmware prerequisite:** The sensor ships with Goodix factory
+firmware that must be provisioned once via
+[goodix-fp-dump](https://github.com/goodix-fp-linux-dev/goodix-fp-dump)
+before the driver can communicate.  An unflashed sensor will fail
+`probe` cleanly (no hang, no crash).  Firmware redistribution is
+out of scope for libfprint — same situation as fwupd-dependent
+devices, except the user runs a one-time script instead.
 
 **No existing driver files or library API are modified**, aside from a
 1-line `g_get_monotonic_time()` fix in `fpi-device.c` that affects all
@@ -33,25 +45,30 @@ drivers.
   blob, image crop, firmware version).
 - **goodix_proto.c/.h** — Low-level protocol struct definitions and
   encode/decode helpers.
-- **sigfm.c/.h** — Pure-C feature matcher: FAST-9 corner detection +
-  unsteered BRIEF-256 descriptors + RANSAC rigid-transform verification.
-  Uses only `<glib.h>` and `<math.h>`.
+- **sigfm.c/.h** — Pure-C feature matcher (FAST-9 + BRIEF-256 +
+  RANSAC rigid-transform).  Lives in `drivers/goodixtls/` because it
+  is tightly coupled to this sensor's resolution class and image
+  characteristics; if other low-res sensors appear it can be promoted
+  to a shared module.  Uses only `<glib.h>` and `<math.h>`.
 
 ### Why not NBIS?
-The sensor's 64x80 px (3.2x4.0 mm) image contains ~6-8 ridge periods;
-`mindtct` yields <=2 minutiae at any upscale factor with reliability <=0.19.
-The SIGFM keypoint matcher is purpose-built for this resolution class.
+The sensor's 64×80 px image contains ~6–8 ridge periods; `mindtct`
+yields ≤2 minutiae at any upscale factor (tested 1×–8×) with
+reliability ≤0.19.  This matches @benzea's assessment in
+[issue #376](https://gitlab.freedesktop.org/libfprint/libfprint/-/issues/376):
+*"minutiae based matching just isn't going to cut it for that image
+size"*.
 
 ---
 
-## File summary (2 commits, +5,447/-3 net)
+## File summary (2 commits, +5,447/−3 net)
 
-| Commit | Files | What |
-|--------|-------|------|
-| `811160f` fpi-device fix | 1 | `g_get_monotonic_time()` instead of `g_get_real_time() / 1000` |
-| `bf25ee7` driver + test | 23 | 13 driver sources, meson integration, hwdb entry, umockdev pcap replay test, `getrandom-seed.c` TLS shim |
+### Commit 1 — fpi-device fix (1 file)
+`g_get_monotonic_time()` instead of `g_get_real_time() / 1000`
 
-### New driver files (~4,400 lines)
+### Commit 2 — driver + test (23 files)
+
+New driver files (~4,400 lines):
 ```
 libfprint/drivers/goodixtls/
   goodix.c        goodix.h          - protocol transport
@@ -62,7 +79,7 @@ libfprint/drivers/goodixtls/
   sigfm.c         sigfm.h           - FAST-9/BRIEF-256 matcher
 ```
 
-### Test files
+Test files:
 ```
 tests/getrandom-seed.c              - LD_PRELOAD shim for deterministic gnutls_rnd()
 tests/goodixtls511/custom.py        - umockdev replay test script
@@ -71,25 +88,24 @@ tests/goodixtls511/device           - umockdev device description
 tests/goodixtls511/README.md        - test recording instructions
 ```
 
+Plus: meson integration, hwdb entry.
+
 ---
 
 ## Performance
 
-Benchmarked on a 150-frame corpus (5 fingers x 30 captures):
+Benchmarked on a 150-frame corpus (5 fingers × 30 captures each):
 
 | Metric | Value |
 |--------|-------|
-| Per-attempt FRR | 27.6% |
-| Effective FRR (5 retries) | 0.16% |
+| Effective FRR (≤5 attempts) | **0.16%** |
+| Per-attempt FRR | 27.6% (comparable to other small-area sensors) |
 | FAR | 0.00% |
 | Score threshold | 7 |
-| Enrollment stages | 20 (validated: 15->+12 pp FRR, 10->+23 pp FRR, 30->no gain) |
+| Enrollment stages | 20 |
 
-Full benchmark methodology in `tools/benchmark/`.
-
-> **Note:** The test corpus contains biometric data and is not included
-> in the repository. Reviewers can reproduce results with their own
-> sensor captures using `tools/benchmark/` and `tools/scripts/`.
+Hardware-tested: 20-stage enroll, verify, identify, `fprintd`/PAM
+integration (KDE login, sudo unlock).
 
 ---
 
@@ -99,21 +115,52 @@ Full benchmark methodology in `tools/benchmark/`.
 meson setup build -Dgoodixtls=enabled
 ninja -C build
 meson test -C build goodixtls511   # pcap replay test
-meson test -C build                # full suite - no regressions
+meson test -C build                # full suite — no regressions
 ```
-
-Hardware-tested: 20-stage enroll, verify, identify, `fprintd`/PAM
-integration (KDE login, sudo unlock).
 
 ---
 
 ## Checklist
 
-- [x] `ninja -C build` - zero warnings
-- [x] `meson test -C build` - no regressions
+- [x] `ninja -C build` — zero warnings
+- [x] `meson test -C build` — no regressions
 - [x] Driver replay test passes under `FP_DEVICE_EMULATION=1`
-- [x] No existing driver files modified
+- [x] No existing driver files modified (except 1-line fpi-device fix)
 - [x] C style matches upstream (GNU indent, `/* */` comments, GLib allocators)
 - [x] Enroll + verify on physical hardware
 - [x] LD_PRELOAD shim scoped to goodixtls511 test only
 - [ ] CI green on freedesktop GitLab
+
+---
+
+## Relationship to prior work
+
+This driver is a from-scratch rewrite for upstream acceptance.  The
+Goodix TLS protocol knowledge, image pipeline, and the idea of a
+non-minutiae matcher originate in the community effort around
+[issue #376](https://gitlab.freedesktop.org/libfprint/libfprint/-/issues/376)
+(Apr 2021).  The existing community driver
+([0x00002a/libfprint](https://github.com/0x00002a/libfprint), `0x2a/dev/goodixtls-sigfm` branch)
+could not be submitted upstream as-is: it uses OpenSSL (GNOME ecosystem
+prefers GnuTLS), blocking pthreads (libfprint requires GLib async I/O),
+and OpenCV + C++17 (too heavy for a single driver).  @gulp's recent
+[PR #32](https://github.com/goodix-fp-linux-dev/libfprint/pull/32) for
+the 5117 sensor builds on the same stack and shares the same blockers.
+
+Changes made here to reach upstream quality:
+
+- **OpenSSL → GnuTLS** with in-memory custom-transport callbacks
+  (no socket pair, no threads).
+- **pthreads → GLib async I/O** — TLS handshake driven entirely by
+  `FpiSsm` state machines.
+- **C++17 / OpenCV SIGFM → pure-C SIGFM** (~665 lines, FAST-9 +
+  BRIEF-256, depends only on `<glib.h>` + `<math.h>`).
+- **Rebased onto 1.94.9.**
+
+---
+
+## Acknowledgements
+
+Based on protocol reverse-engineering by the
+[goodix-fp-linux-dev](https://github.com/goodix-fp-linux-dev) community.
+Individual credits are in the driver source headers (`goodixtls.c`).
