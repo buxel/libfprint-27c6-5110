@@ -16,9 +16,8 @@ libfprint `v1.94.9`. Matching uses SIGFM (FAST-9 + BRIEF-256) instead of NBIS
 > branch with potential to be submitted upstream to libfprint. **AI assistance was
 > used throughout the porting, refactoring, and documentation process.**
 >
-> The AUR package (`libfprint-goodixtls511-git`) is provided for **personal use
-> only**. It has not been published to the AUR and comes with no warranty.
-> Use it at your own risk.
+> The AUR package ([`libfprint-goodixtls511-git`](https://aur.archlinux.org/packages/libfprint-goodixtls511-git))
+> is provided as-is with no warranty. Use it at your own risk.
 
 ---
 
@@ -82,15 +81,18 @@ Reference enrollment artifacts are in `test-data/` (`enrolled.pgm`,
 
 ## 4. Install on Host (CachyOS / Arch)
 
+**AUR:** [`libfprint-goodixtls511-git`](https://aur.archlinux.org/packages/libfprint-goodixtls511-git)
+
+```bash
+paru -S libfprint-goodixtls511-git
+# or: yay -S libfprint-goodixtls511-git
+```
+
+Or build manually:
+
 ```bash
 cd packaging/aur
 makepkg -si
-```
-
-Or with an AUR helper once the package is published:
-
-```bash
-yay -S libfprint-goodixtls511-git
 ```
 
 Then enroll:
@@ -156,7 +158,6 @@ See [ACTION_PLAN.md](ACTION_PLAN.md) for the full phase status, open questions,
 and deferred improvements.
 
 **Next up:**
-- Publish AUR package (`libfprint-goodixtls511-git`)
 - Validate with larger cross-session corpus (50+ frames)
 
 ---
