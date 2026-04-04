@@ -7,6 +7,10 @@ including KDE fingerprint login via fprintd.
 Branch: `goodixtls-on-1.94.9` — pure-C rewrite of the goodixtls511 driver atop
 libfprint `v1.94.9`. Matching uses SIGFM (FAST-9 + BRIEF-256) instead of NBIS
 
+
+> [!IMPORTANT]  
+> Firmware prerequisite: The sensor ships with Goodix factory firmware that must be provisioned once via goodix-fp-dump before the driver can communicate. An unflashed sensor will fail probe cleanly (no hang, no crash). Firmware redistribution is out of scope for libfprint — same situation as fwupd-dependent devices, except the user runs a one-time script instead.
+
 ---
 
 > **Disclaimer**
